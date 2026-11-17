@@ -59,13 +59,49 @@ class GitRefTests(WorkspaceCase):
         self.assertEqual(self.status(), "")
         self.assertTrue((self.ws / "new.md").exists())  # worktree followed the ref
 
-    def test_advance_refuses_dirty_checkout(self):
+    def test_advance_dirty_checkout_without_overlap(self):
         head = self.rev("HEAD")
         c = self.commit_on(head, {"new.md": "n\n"})
         self.write("README.md", "edited\n")
-        with self.assertRaises(Refused):
-            self.g.advance("refs/heads/main", c, head)
-        self.assertEqual(self.rev("main"), head)
+        self.write("staged.md", "staged\n")
+        self.git("add", "staged.md")
+        self.write("scratch/untracked.txt", "u\n")
+        cached, unstaged = self.git("diff", "--cached"), self.git("diff")
+        self.assertEqual(self.g.advance("refs/heads/main", c, head), "merge")
+        self.assertEqual(self.rev("main"), c)
+        self.assertEqual((self.git("diff", "--cached"), self.git("diff")), (cached, unstaged))
+        self.assertEqual((self.ws / "README.md").read_text(encoding="utf-8"), "edited\n")
+        self.assertTrue((self.ws / "scratch/untracked.txt").exists())
+
+    def test_advance_refuses_overlap_and_lists_paths(self):
+        head = self.rev("HEAD")
+        c = self.commit_on(head, {"README.md": "theirs\n", "new.md": "n\n", "dir/a.md": "a\n"})
+        cases = [
+            ("modified", lambda: self.write("README.md", "mine\n"), ["README.md"]),
+            ("staged", lambda: (self.write("README.md", "mine\n"), self.git("add", "README.md")), ["README.md"]),
+            ("untracked same name", lambda: self.write("new.md", "local\n"), ["new.md"]),
+            ("untracked file where a dir is added", lambda: self.write("dir", "x\n"), ["dir"]),
+        ]
+        for label, make_dirty, expected in cases:
+            with self.subTest(label):
+                make_dirty()
+                with self.assertRaises(Refused) as cm:
+                    self.g.advance("refs/heads/main", c, head)
+                for path in expected:
+                    self.assertIn(path, str(cm.exception))
+                self.assertEqual(self.g.overlap(self.ws, head, c), expected)
+                self.assertEqual(self.rev("main"), head)
+                self.git("reset", "-q", "--hard")
+                self.git("clean", "-qfd")
+
+    def test_overlap_catches_ignored_file(self):
+        self.write(".gitignore", "*.log\n")
+        self.git("add", ".gitignore")
+        self.git("commit", "-q", "-m", "ignore")
+        head = self.rev("HEAD")
+        c = self.commit_on(head, {"keep.log": "tracked now\n"})
+        self.write("keep.log", "local ignored data\n")
+        self.assertEqual(self.g.overlap(self.ws, head, c), ["keep.log"])
 
     def test_advance_not_checked_out_uses_update_ref(self):
         self.git("switch", "-q", "-c", "scratch")

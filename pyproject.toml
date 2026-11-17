@@ -7,7 +7,7 @@ name = "exocortex-engine"
 # Single version source. plugins/exo/.claude-plugin/plugin.json, the command prose
 # (plugins/exo/commands/project.md) and src/exocortex_engine/__init__.py must match;
 # tests/test_version.py enforces it.
-version = "0.1.0"
+version = "0.1.1"
 description = "Shared engine for Exocortex workspaces: the /exo:project core (stdlib only)."
 readme = "README.md"
 requires-python = ">=3.10"

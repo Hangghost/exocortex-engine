@@ -104,22 +104,21 @@ def require_tip(ctx: Ctx, ref: str, what: str) -> str:
     return tip
 
 
-def precheck(ctx: Ctx, *refs: str) -> None:
-    """Refuse up front when any target branch is checked out with uncommitted changes."""
-    for ref in refs:
-        ctx.git.check_advance(ref)
-
-
 def write_refs(ctx: Ctx, updates: Sequence[RefUpdate]) -> dict[str, str]:
     """Apply ref moves. Checked-out branches are fast-forwarded first (in their
-    worktree); every other ref moves in one atomic CAS transaction."""
+    worktree); every other ref moves in one atomic CAS transaction.
+
+    Every checked-out target is checked for overlapping uncommitted changes before
+    any ref moves, so a refusal means nothing was written."""
     holders = ctx.git.holders()
     held = [u for u in updates if u.ref in holders]
     rest = [u for u in updates if u.ref not in holders]
-    how: dict[str, str] = {}
     for u in held:
         if u.new == ZERO:
             raise Refused(f"{short_ref(u.ref)} is checked out at {holders[u.ref].path}; not deleting it")
+        ctx.git.check_advance(u.ref, u.new, u.old)
+    how: dict[str, str] = {}
+    for u in held:
         how[u.ref] = ctx.git.advance(u.ref, u.new, u.old)
     ctx.git.update_refs(rest)
     for u in rest:
@@ -201,7 +200,6 @@ def cmd_new(ctx: Ctx, out: Out, a: argparse.Namespace) -> None:
     if not a.title.strip() or not a.goal.strip():
         raise UsageError("--title and --goal must not be empty")
     pref = project_ref(name)
-    precheck(ctx, ctx.main, pref)
     main_tip = require_tip(ctx, ctx.main, "branch")
     if ctx.git.rev(pref):
         raise Refused(f"{short_ref(pref)} already exists locally")
@@ -344,7 +342,6 @@ def cmd_apply(ctx: Ctx, out: Out, a: argparse.Namespace) -> None:
         out.data["errors"] = errors
         raise Refused("; ".join(errors))
     assert tip is not None
-    precheck(ctx, pref, cref)
     new_md = project_md.set_frontmatter(new_md, "last_updated", ctx.today)
     files: dict[str, Optional[str]] = {project_md.project_path(name): new_md}
     index_text = ctx.git.read_text(tip, index_md.INDEX_PATH)
@@ -431,7 +428,6 @@ def cmd_board(ctx: Ctx, out: Out, a: argparse.Namespace) -> None:
 def cmd_land_content(ctx: Ctx, out: Out, a: argparse.Namespace) -> None:
     day = check_date(a.date) if a.date else ctx.today
     cref = content_ref(day)
-    precheck(ctx, ctx.main)
     tip = require_tip(ctx, cref, "branch")
     if cref in ctx.git.holders():
         raise Refused(f"{short_ref(cref)} is checked out at {ctx.git.holders()[cref].path}; not landing it")
@@ -475,7 +471,6 @@ def cmd_land_project(ctx: Ctx, out: Out, a: argparse.Namespace) -> None:
     if not a.milestone.strip():
         raise UsageError("milestone must not be empty")
     pref = project_ref(name)
-    precheck(ctx, ctx.main)
     tip = require_tip(ctx, pref, "branch")
     main_tip = require_tip(ctx, ctx.main, "branch")
     if ctx.git.is_ancestor(tip, main_tip):

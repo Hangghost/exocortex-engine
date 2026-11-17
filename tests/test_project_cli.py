@@ -4,9 +4,10 @@ from __future__ import annotations
 import os
 import unittest
 
-from _workspace import WorkspaceCase
+from _workspace import INDEX7, WorkspaceCase
 
 SECTION = "### 進展\n\n- did a thing\n\n### 經驗與觀察\n\n- learned\n\n### 下一步\n\n- next thing\n"
+INDEX_EDITED = INDEX7.replace("> intro line kept as is", "> local edit, not committed")
 
 
 def alpha_md(next_line: str = "- updated next action") -> str:
@@ -52,13 +53,29 @@ class NewTests(WorkspaceCase):
         self.remote_before = self.refs(self.remote)
         self._assert_zero_writes(before, self.cli("new", "epsilon", "--title", "E", "--goal", "g"))
 
-    def test_new_refuses_dirty_main_and_bad_name(self):
+    def test_new_refuses_overlapping_dirty_main_and_bad_name(self):
         self.remote_before = self.refs(self.remote)
         before = self.refs()
-        self.write("README.md", "uncommitted\n")
-        self._assert_zero_writes(before, self.cli("new", "zeta", "--title", "Z", "--goal", "g"))
+        self.write("projects/INDEX.md", INDEX_EDITED)  # new rewrites INDEX.md
+        self.write("projects/zeta/notes.md", "untracked, inside the new project dir\n")
+        p = self.cli("new", "zeta", "--title", "Z", "--goal", "g")
+        self._assert_zero_writes(before, p)
+        self.assertIn("projects/INDEX.md", p.stdout)
+        self.assertNotIn("projects/zeta/notes.md", p.stdout)  # no path of the commit is under it
         p = self.cli("new", "Bad_Name", "--title", "Z", "--goal", "g")
         self.assertEqual((p.returncode, p.first), (2, "result: usage-error"))
+
+    def test_new_with_unrelated_dirty_main(self):
+        self.write("README.md", "uncommitted\n")
+        self.write("staged.md", "staged\n")
+        self.git("add", "staged.md")
+        cached = self.git("diff", "--cached")
+        p = self.cli("new", "zeta", "--title", "Z", "--goal", "g")
+        self.assertEqual(p.returncode, 0, p.stdout)
+        self.assertEqual(self.git("rev-parse", "main^2").strip(), self.rev("project/zeta"))
+        self.assertEqual(self.git("diff", "--cached"), cached)
+        self.assertEqual((self.ws / "README.md").read_text(encoding="utf-8"), "uncommitted\n")
+        self.assertTrue((self.ws / "projects/zeta/PROJECT.md").exists())
 
 
 class UpdateTests(WorkspaceCase):
@@ -155,15 +172,49 @@ class LandTests(WorkspaceCase):
         self.assertEqual(self.rev("main", self.remote), self.rev("main"))
         self.assertEqual(self.status(), "")
 
-    def test_land_refuses_dirty_main(self):
+    def test_land_refuses_overlapping_dirty_main(self):
+        self._apply()
+        wl = "contexts/work_logs/2026-03-10_alpha_update.md"
+        cases = [
+            # (command, how the checkout on main is dirty, path that must be listed)
+            (("land", "content"), lambda: self.write(wl, "untracked file, same name\n"), wl),
+            (("land", "project", "alpha", "m1"), lambda: self.write("projects/alpha/PROJECT.md", "edited\n"),
+             "projects/alpha/PROJECT.md"),
+            (("land", "project", "alpha", "m1"),
+             lambda: (self.write("projects/INDEX.md", INDEX_EDITED), self.git("add", "projects/INDEX.md")),
+             "projects/INDEX.md"),
+        ]
+        for args, make_dirty, path in cases:
+            with self.subTest(args=args, path=path):
+                make_dirty()
+                self.write("README.md", "unrelated, does not matter\n")
+                before, remote_before = self.refs(), self.refs(self.remote)
+                p = self.cli(*args)
+                self.assertEqual((p.returncode, p.first), (1, "result: rejected"), p.stdout)
+                self.assertIn(path, p.stdout)
+                self.assertNotIn("README.md", p.stdout)
+                self.assertEqual(self.refs(), before)
+                self.assertEqual(self.refs(self.remote), remote_before)
+                self.git("reset", "-q", "--hard")
+                self.git("clean", "-qfd")
+
+    def test_land_with_unrelated_dirty_main(self):
         self._apply()
         self.write("README.md", "uncommitted\n")
-        before = self.refs()
+        self.write("notes/staged.md", "staged\n")
+        self.git("add", "notes/staged.md")
+        self.write("scratch.txt", "untracked\n")
+        cached, unstaged = self.git("diff", "--cached"), self.git("diff")
         for args in (("land", "content"), ("land", "project", "alpha", "m1")):
             p = self.cli(*args)
-            self.assertEqual((p.returncode, p.first), (1, "result: rejected"), p.stdout)
-            self.assertIn("uncommitted", p.stdout)
-            self.assertEqual(self.refs(), before)
+            self.assertEqual((p.returncode, p.first), (0, "result: ok"), p.stdout)
+        self.assertEqual(self.git("log", "-2", "--format=%s", "main").splitlines(),
+                         ["Merge project/alpha: m1", "content: 2026-03-10 daily snapshot"])
+        self.assertEqual((self.git("diff", "--cached"), self.git("diff")), (cached, unstaged))
+        self.assertEqual((self.ws / "README.md").read_text(encoding="utf-8"), "uncommitted\n")
+        self.assertEqual((self.ws / "scratch.txt").read_text(encoding="utf-8"), "untracked\n")
+        self.assertTrue((self.ws / "contexts/work_logs/2026-03-10_alpha_update.md").exists())
+        self.assertIn("now better", (self.ws / "projects/alpha/PROJECT.md").read_text(encoding="utf-8"))
 
     def test_land_project_merges_scope_and_keeps_branch(self):
         self._apply()

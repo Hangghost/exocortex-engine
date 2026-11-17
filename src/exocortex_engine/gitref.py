@@ -8,8 +8,9 @@ atomic transaction). The caller's working tree, index and HEAD stay as they are.
 The one exception is a branch that is checked out in some worktree (normally
 ``main``). Moving such a ref behind the worktree's back would leave its index
 and files out of step with HEAD, so :meth:`Git.advance` fast-forwards it with an
-ordinary ``git merge --ff-only`` inside that worktree when it is clean, and
-refuses when it has uncommitted changes to tracked files.
+ordinary ``git merge --ff-only`` inside that worktree. Uncommitted changes there
+(staged, unstaged or untracked) are fine unless they overlap the paths the move
+changes; then it refuses and lists the overlapping paths.
 
 Only the standard library is used; every git call passes a list (``shell=False``),
 adds ``-c core.quotepath=false`` and decodes output as UTF-8.
@@ -267,33 +268,69 @@ class Git:
         return result
 
     def dirty_paths(self, worktree: Path) -> list[str]:
-        """Tracked paths with uncommitted changes (staged or not) in ``worktree``."""
-        out = self.run_bytes(
-            "status", "--porcelain", "-z", "--untracked-files=no", cwd=worktree
-        ).stdout.decode("utf-8")
-        return [rec[3:] for rec in out.split("\0") if len(rec) > 3]
+        """Paths with uncommitted changes in ``worktree``: staged, unstaged and
+        untracked (every file, not collapsed directories). A rename or copy
+        contributes both its new and its original path."""
+        recs = self.run_bytes(
+            "status", "--porcelain", "-z", "--untracked-files=all", cwd=worktree
+        ).stdout.decode("utf-8").split("\0")
+        paths: list[str] = []
+        i = 0
+        while i < len(recs):
+            rec = recs[i]
+            if len(rec) > 3:
+                paths.append(rec[3:].rstrip("/"))
+                if "R" in rec[:2] or "C" in rec[:2]:
+                    i += 1
+                    if i < len(recs) and recs[i]:
+                        paths.append(recs[i].rstrip("/"))
+            i += 1
+        return paths
 
-    def check_advance(self, ref: str) -> Optional[Holder]:
-        """Raise :class:`Refused` if ``ref`` is checked out somewhere with uncommitted
-        changes; return the holder (or None) otherwise. Call before any write."""
+    def overlap(self, worktree: Path, old: str, new: str) -> list[str]:
+        """Paths where fast-forwarding ``worktree`` from ``old`` to ``new`` would meet
+        local state: a dirty path equal to (or a parent/child directory of) a path the
+        commits change, or any existing file where ``new`` adds a path (this also
+        catches ignored files, which git itself would overwrite)."""
+        changed = self.changed_paths(old, new)
+        if not changed:
+            return []
+        hits: set[str] = set()
+        for d in self.dirty_paths(worktree):
+            for c in changed:
+                if c == d or c.startswith(d + "/") or d.startswith(c + "/"):
+                    hits.add(d)
+        in_old = self.entries(old, changed)
+        for c in changed:
+            if c not in in_old:
+                p = worktree / c
+                if p.exists() or p.is_symlink():
+                    hits.add(c)
+        return sorted(hits)
+
+    def check_advance(self, ref: str, new: Optional[str] = None, old: Optional[str] = None) -> Optional[Holder]:
+        """Return the worktree holding ``ref`` (or None). With ``new``/``old``, raise
+        :class:`Refused` listing every overlapping path when the holder's uncommitted
+        changes meet what the move would change. Call before any ref moves."""
         holder = self.holders().get(ref)
-        if holder is not None:
-            dirty = self.dirty_paths(holder.path)
-            if dirty:
-                shown = ", ".join(dirty[:5]) + (" ..." if len(dirty) > 5 else "")
+        if holder is not None and new is not None and old is not None:
+            hits = self.overlap(holder.path, old, new)
+            if hits:
                 raise Refused(
-                    f"{short_ref(ref)} is checked out at {holder.path} with uncommitted changes "
-                    f"({shown}); commit or stash them, then run the command again"
+                    f"{short_ref(ref)} is checked out at {holder.path} and these paths have uncommitted "
+                    f"changes that the write would touch: {', '.join(hits)}; commit or stash them, "
+                    "then run the command again"
                 )
         return holder
 
     def advance(self, ref: str, new: str, old: str) -> str:
         """Move a branch that may be checked out. ``new`` must descend from ``old``.
 
-        Not checked out: CAS ``update-ref``. Checked out and clean:
-        ``git merge --ff-only`` in that worktree, so its index and files follow.
-        Returns ``"update-ref"`` or ``"merge"``."""
-        holder = self.check_advance(ref)
+        Not checked out: CAS ``update-ref``. Checked out: ``git merge --ff-only`` in
+        that worktree, so its index and files follow; refused when uncommitted local
+        changes overlap the paths the move changes (git's own check is the second
+        guard). Returns ``"update-ref"`` or ``"merge"``."""
+        holder = self.check_advance(ref, new, old)
         if holder is None:
             self.update_refs([RefUpdate(ref, new, old)])
             return "update-ref"

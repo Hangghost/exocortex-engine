@@ -16,10 +16,16 @@ calls the CLI for everything else.
 - **Reads go through git refs**, never through working-tree copies: the truth for
   `projects/<name>/` is the `project/<name>` branch.
 - **Writing `main`.** When `main` is not checked out anywhere, it is moved with the same CAS
-  `update-ref`. When it is checked out in a clean worktree, the command builds the commit the
-  same way and then runs `git merge --ff-only <commit>` in that worktree, so its index and
-  files follow. When that worktree has uncommitted changes to tracked files, the command
-  refuses and writes nothing.
+  `update-ref`. When it is checked out in a worktree, the command builds the commit the same
+  way and then runs `git merge --ff-only <commit>` in that worktree, so its index and files
+  follow. Uncommitted changes there (unstaged, staged or untracked) are left alone and do not
+  block the write, **unless they overlap** the paths the new commit changes: a dirty path
+  equal to a changed path, a dirty file where the commit adds a directory (or the reverse), or
+  any existing file (untracked or ignored) where the commit adds a path. Then the command
+  refuses, lists every overlapping path and writes nothing. `git merge --ff-only` refuses
+  overlaps on its own as well; the command's check runs first so that a refusal is clean and
+  covers every ref of the command (`new` moves `main` and creates `project/<name>`, and
+  neither happens).
 - **Push** after every write (`git push origin <ref>`). A failed push does not roll back the
   local write; it is reported as `push <ref>: failed: …`.
 
@@ -118,7 +124,7 @@ The workspace may pin the contract in `.exocortex/instance.toml` with a top-leve
    ```toml
    [project]
    dependencies = [
-     "exocortex-engine @ git+https://github.com/Hangghost/exocortex-engine@v0.1.0",
+     "exocortex-engine @ git+https://github.com/Hangghost/exocortex-engine@v0.1.1",
    ]
    ```
 
