@@ -1,0 +1,9 @@
+{
+  "name": "exo",
+  "version": "0.1.0",
+  "description": "Exocortex workspace commands: /exo:project (new, load, update, board, land).",
+  "author": {
+    "name": "Hangghost"
+  },
+  "repository": "https://github.com/Hangghost/exocortex-engine"
+}

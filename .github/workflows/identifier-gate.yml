@@ -41,6 +41,8 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+        # 3.10 is the floor for tools/ and src/exocortex_engine.
+        python: ["3.10", "3.12"]
     runs-on: ${{ matrix.os }}
     env:
       PYTHONUTF8: "1"
@@ -50,6 +52,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - name: Unit tests (synthetic identifier lists only)
+          python-version: ${{ matrix.python }}
+      # Identifier gate and /exo:project core (tests/test_*.py); synthetic data only.
+      - name: Unit tests (synthetic data only)
         run: python -m unittest discover -s tests -v

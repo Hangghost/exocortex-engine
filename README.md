@@ -3,6 +3,17 @@
 The shared engine for Exocortex instances. Every push to this repository is a public
 release, so the first thing in it is a gate that keeps private identifiers out.
 
+## `/exo:project`
+
+Project context management for a workspace repository (`new`, `load`, `update`, `board`,
+`land`): the stdlib-only package `exocortex_engine` plus the Claude Code plugin `exo` in this
+repository's marketplace. Contract, CLI and installation: [docs/exo-project.md](docs/exo-project.md).
+
+```sh
+claude plugin marketplace add Hangghost/exocortex-engine
+claude plugin install exo@exocortex-engine --scope project
+```
+
 ## Private identifier gate
 
 `tools/identifier_gate.py` is a single stdlib-only Python script (3.10+, macOS, Linux and
