@@ -1,0 +1,55 @@
+name: identifier-gate
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    # Scans every blob, path and commit (message, names, emails) reachable from HEAD.
+    # Output is redacted: locations and pattern ids only, never matched text or patterns.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Scan tree and history for private identifiers
+        shell: bash
+        env:
+          EXO_IDENTIFIERS: ${{ secrets.EXO_IDENTIFIERS }}
+          EXO_GATE_REDACT: "1"
+          PYTHONUTF8: "1"
+        run: |
+          if [ -z "$EXO_IDENTIFIERS" ]; then
+            echo "::error::Secret EXO_IDENTIFIERS is unavailable (e.g. a fork pull request); private identifiers were NOT checked. Failing closed."
+            exit 1
+          fi
+          list="$RUNNER_TEMP/identifiers.yaml"
+          (umask 077 && printf '%s\n' "$EXO_IDENTIFIERS" > "$list")
+          unset EXO_IDENTIFIERS
+          EXO_IDENTIFIERS_FILE="$list" python tools/identifier_gate.py --redact history HEAD
+
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Unit tests (synthetic identifier lists only)
+        run: python -m unittest discover -s tests -v

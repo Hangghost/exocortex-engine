@@ -1,0 +1,3 @@
+#!/bin/sh
+# Identifier gate: everything reachable from the commits being pushed (catches --no-verify commits).
+exec sh "$(dirname "$0")/_gate.sh" pre-push
