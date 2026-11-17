@@ -185,6 +185,16 @@ def validate(text: str) -> list[str]:
     return errors
 
 
+def check_update(old: str, new: str) -> list[str]:
+    """Problems with replacing PROJECT.md ``old`` by ``new``: :func:`validate`, and no
+    ``## `` section may disappear. Every write of a PROJECT.md goes through this."""
+    errors = validate(new)
+    dropped = dropped_sections(old, new)
+    if dropped:
+        errors.append("new PROJECT.md drops sections: " + ", ".join(f"'## {t}'" for t in dropped))
+    return errors
+
+
 def dropped_sections(old: str, new: str) -> list[str]:
     """Section titles present in ``old`` but gone from ``new``."""
     new_titles = {t for t, _ in sections(new)}

@@ -10,7 +10,9 @@ The one exception is a branch that is checked out in some worktree (normally
 and files out of step with HEAD, so :meth:`Git.advance` fast-forwards it with an
 ordinary ``git merge --ff-only`` inside that worktree. Uncommitted changes there
 (staged, unstaged or untracked) are fine unless they overlap the paths the move
-changes; then it refuses and lists the overlapping paths.
+changes; then it refuses and lists the overlapping paths. A dirty path whose file
+already holds exactly what the move brings is not an overlap: it is normalized first
+and the fast-forward writes the same bytes back (see :meth:`Git.overlap`).
 
 Only the standard library is used; every git call passes a list (``shell=False``),
 adds ``-c core.quotepath=false`` and decodes output as UTF-8.
@@ -23,7 +25,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Mapping, Optional, Sequence
+from typing import Any, Iterable, Mapping, Optional, Sequence
 
 ZERO = "0" * 40
 FILE_MODE = "100644"
@@ -63,6 +65,98 @@ class Holder:
 
     path: Path
     branch: str  # full ref name
+
+
+@dataclass(frozen=True)
+class SamePath:
+    """A dirty path whose working-tree content already equals what a move brings."""
+
+    path: str
+    head: Optional[tuple[str, str]]  # entry in the checkout's HEAD (the old commit)
+    index: Optional[tuple[str, str]]  # index entry before normalizing
+    blob: Optional[str]  # landed blob id; None when the move removes the path
+    worktree: Optional[str]  # clean-filter hash of the file; None when it is absent
+
+
+@dataclass(frozen=True)
+class Overlap:
+    blocking: list[str]
+    same: list[SamePath]
+
+
+@dataclass(frozen=True)
+class AdvancePlan:
+    holder: Holder
+    same: list[SamePath]
+
+
+@dataclass(frozen=True)
+class _Saved:
+    same: SamePath
+    data: Optional[bytes]
+
+
+_REGULAR = ("100644", "100755")
+
+
+def _same_path(
+    worktree: Path,
+    path: str,
+    head: Optional[tuple[str, str]],
+    new: Optional[tuple[str, str]],
+    index: Any,
+    wt_hash: Optional[str],
+) -> Optional[SamePath]:
+    """A :class:`SamePath` when ``path`` already holds what the move brings, else None.
+    ``index`` is ``()`` when the path is not in the index, None when it is conflicted."""
+    if index is None:
+        return None
+    idx = index or None
+    for e in (head, new, idx):
+        if e is not None and e[0] not in _REGULAR:
+            return None  # symlinks, submodules: never treated as the same
+    p = worktree / path
+    new_sha = new[1] if new else None
+    if (idx[1] if idx else None) not in {head[1] if head else None, new_sha}:
+        return None  # staged content that is neither HEAD's nor the landed one
+    if p.is_symlink():
+        return None
+    if p.exists():
+        if wt_hash is None or wt_hash != new_sha:
+            return None
+    elif new_sha is not None:
+        return None
+    return SamePath(path, head, idx, new_sha, wt_hash)
+
+
+def _not_restored(paths: Sequence[str]) -> str:
+    if not paths:
+        return ""
+    return ("; these files were changed by someone else meanwhile and were not put back (their content "
+            "is on the branch being landed): " + ", ".join(paths))
+
+
+def _overlap_message(ref: str, holder: Holder, paths: Sequence[str]) -> str:
+    from .generated_files import is_contexts_index_path
+
+    generated = [p for p in paths if is_contexts_index_path(p)]
+    msg = (
+        f"{short_ref(ref)} is checked out at {holder.path} and these paths have uncommitted changes "
+        f"that differ from what the write brings: {', '.join(paths)}; commit them first "
+        "(content and project files: /exo:content commit), or stash them, then run the command again"
+    )
+    if generated:
+        msg += (
+            f". Generated index files ({', '.join(generated)}) are recomputed on the branch: "
+            "discard your local copy (git checkout -- <path>, or delete it if untracked)"
+        )
+    return msg
+
+
+def _chunks(paths: list[str], size: int = 200) -> list[list[str]]:
+    """Pathspec batches: keeps each command line short (Windows caps it near 32k characters).
+    An empty list stays one empty batch, which means "everything" to the callers."""
+    return [paths[i:i + size] for i in range(0, len(paths), size)] or [[]]
 
 
 def branch_ref(name: str) -> str:
@@ -134,16 +228,16 @@ class Git:
 
     def entries(self, rev: str, paths: Iterable[str] = ()) -> dict[str, tuple[str, str]]:
         """``{path: (mode, sha)}`` for blobs under ``paths`` (all when empty) at ``rev``."""
-        paths = list(paths)
-        out = self.run_bytes("--literal-pathspecs", "ls-tree", "-r", "-z", rev, "--", *paths).stdout
         result: dict[str, tuple[str, str]] = {}
-        for rec in out.decode("utf-8").split("\0"):
-            if not rec:
-                continue
-            meta, path = rec.split("\t", 1)
-            mode, kind, sha = meta.split(" ")
-            if kind == "blob":
-                result[path] = (mode, sha)
+        for chunk in _chunks(list(paths)):
+            out = self.run_bytes("--literal-pathspecs", "ls-tree", "-r", "-z", rev, "--", *chunk).stdout
+            for rec in out.decode("utf-8").split("\0"):
+                if not rec:
+                    continue
+                meta, path = rec.split("\t", 1)
+                mode, kind, sha = meta.split(" ")
+                if kind == "blob":
+                    result[path] = (mode, sha)
         return result
 
     def changed_paths(self, a: str, b: str, pathspec: Sequence[str] = ()) -> list[str]:
@@ -181,9 +275,10 @@ class Git:
 
     # ---- object writes (no ref moves) --------------------------------------
 
-    def hash_blob(self, data: bytes) -> str:
+    def hash_blob(self, data: bytes, write: bool = True) -> str:
         # --no-filters: store exactly these bytes, whatever autocrlf/attributes say.
-        return self.run_bytes("hash-object", "-w", "--no-filters", "--stdin", input=data).stdout.decode().strip()
+        args = ["hash-object", *(["-w"] if write else []), "--no-filters", "--stdin"]
+        return self.run_bytes(*args, input=data).stdout.decode().strip()
 
     def blob_changes(self, files: Mapping[str, Optional[str | bytes]]) -> dict[str, Optional[tuple[str, str]]]:
         """Hash file contents into blobs; ``None`` marks a removal."""
@@ -287,63 +382,205 @@ class Git:
             i += 1
         return paths
 
-    def overlap(self, worktree: Path, old: str, new: str) -> list[str]:
-        """Paths where fast-forwarding ``worktree`` from ``old`` to ``new`` would meet
-        local state: a dirty path equal to (or a parent/child directory of) a path the
-        commits change, or any existing file where ``new`` adds a path (this also
-        catches ignored files, which git itself would overwrite)."""
+    def index_entries(self, worktree: Path, paths: Iterable[str]) -> dict[str, Optional[tuple[str, str]]]:
+        """``{path: (mode, sha)}`` from ``worktree``'s index; ``None`` for a conflicted path."""
+        paths = list(paths)
+        result: dict[str, Optional[tuple[str, str]]] = {}
+        for chunk in _chunks(paths) if paths else ():
+            out = self.run_bytes("--literal-pathspecs", "ls-files", "-s", "-z", "--", *chunk, cwd=worktree).stdout
+            for rec in out.decode("utf-8").split("\0"):
+                if not rec:
+                    continue
+                meta, path = rec.split("\t", 1)
+                mode, sha, stage = meta.split(" ")
+                result[path] = (mode, sha) if stage == "0" and path not in result else None
+        return result
+
+    def hash_files(self, worktree: Path, paths: Sequence[str], write: bool = False) -> list[str]:
+        """Blob ids of working-tree files as ``git add`` would store them: each path's
+        clean filters apply (``core.autocrlf``, ``.gitattributes``). ``write`` stores them."""
+        if not paths:
+            return []
+        for p in paths:
+            if "\n" in p or "\r" in p:
+                raise ValueError(f"bad path {p!r}")
+        args = ["hash-object", *(["-w"] if write else []), "--stdin-paths"]
+        out = self.run_bytes(*args, input=("\n".join(paths) + "\n").encode("utf-8"), cwd=worktree).stdout
+        shas = out.decode().split()
+        if len(shas) != len(paths):
+            raise GitError(args, 0, "hash-object returned the wrong number of ids")
+        return shas
+
+    def cat_blobs(self, shas: Sequence[str]) -> dict[str, bytes]:
+        """Contents of many blobs with one ``cat-file --batch``."""
+        wanted = list(dict.fromkeys(shas))
+        if not wanted:
+            return {}
+        out = self.run_bytes("cat-file", "--batch", input=("\n".join(wanted) + "\n").encode()).stdout
+        result: dict[str, bytes] = {}
+        pos = 0
+        for sha in wanted:
+            nl = out.index(b"\n", pos)
+            header = out[pos:nl].split(b" ")
+            if len(header) != 3:
+                raise GitError(["cat-file", "--batch"], 0, f"missing object {sha}")
+            size = int(header[2])
+            result[sha] = out[nl + 1: nl + 1 + size]
+            pos = nl + 1 + size + 1
+        return result
+
+    def overlap(self, worktree: Path, old: str, new: str) -> "Overlap":
+        """How fast-forwarding ``worktree`` from ``old`` to ``new`` meets local state.
+
+        A path meets local state when it is dirty (staged, unstaged or untracked) and
+        the move changes it, or when the move adds it and a file is already there (this
+        also catches ignored files, which git itself would overwrite). Such a path is
+        **the same** when the working tree already holds what the move brings: its
+        file, through the clean filters, is the landed blob (or both are absent) and its
+        index entry is HEAD's or the landed one. Every other one blocks, and so does a
+        dirty directory above or below a changed path."""
         changed = self.changed_paths(old, new)
         if not changed:
-            return []
-        hits: set[str] = set()
+            return Overlap([], [])
+        blocking: set[str] = set()
+        candidates: set[str] = set()
+        changed_set = set(changed)
         for d in self.dirty_paths(worktree):
+            if d in changed_set:
+                candidates.add(d)
             for c in changed:
-                if c == d or c.startswith(d + "/") or d.startswith(c + "/"):
-                    hits.add(d)
-        in_old = self.entries(old, changed)
+                if c.startswith(d + "/") or d.startswith(c + "/"):
+                    blocking.add(d)
+        old_e = self.entries(old, changed)
+        new_e = self.entries(new, changed)
         for c in changed:
-            if c not in in_old:
+            if c not in old_e:
                 p = worktree / c
                 if p.exists() or p.is_symlink():
-                    hits.add(c)
-        return sorted(hits)
+                    candidates.add(c)
+        candidates -= blocking
+        index_e = self.index_entries(worktree, sorted(candidates))
+        present = sorted(c for c in candidates if (worktree / c).is_file() and not (worktree / c).is_symlink())
+        wt_hash = dict(zip(present, self.hash_files(worktree, present)))
+        same: list[SamePath] = []
+        for c in sorted(candidates):
+            s = _same_path(worktree, c, old_e.get(c), new_e.get(c), index_e.get(c, ()), wt_hash.get(c))
+            if s is None:
+                blocking.add(c)
+            else:
+                same.append(s)
+        return Overlap(sorted(blocking), same)
 
-    def check_advance(self, ref: str, new: Optional[str] = None, old: Optional[str] = None) -> Optional[Holder]:
-        """Return the worktree holding ``ref`` (or None). With ``new``/``old``, raise
-        :class:`Refused` listing every overlapping path when the holder's uncommitted
-        changes meet what the move would change. Call before any ref moves."""
+    def check_advance(self, ref: str, new: Optional[str] = None, old: Optional[str] = None) -> Optional["AdvancePlan"]:
+        """The plan for moving a branch checked out in some worktree (None when it is not
+        checked out). With ``new``/``old``, raise :class:`Refused` listing every blocking
+        path. Call before any ref moves."""
         holder = self.holders().get(ref)
-        if holder is not None and new is not None and old is not None:
-            hits = self.overlap(holder.path, old, new)
-            if hits:
-                raise Refused(
-                    f"{short_ref(ref)} is checked out at {holder.path} and these paths have uncommitted "
-                    f"changes that the write would touch: {', '.join(hits)}; commit or stash them, "
-                    "then run the command again"
-                )
-        return holder
+        if holder is None:
+            return None
+        if new is None or old is None:
+            return AdvancePlan(holder, [])
+        ov = self.overlap(holder.path, old, new)
+        if ov.blocking:
+            raise Refused(_overlap_message(ref, holder, ov.blocking))
+        return AdvancePlan(holder, ov.same)
 
-    def advance(self, ref: str, new: str, old: str) -> str:
+    def advance(self, ref: str, new: str, old: str, plan: Optional["AdvancePlan"] = None) -> str:
         """Move a branch that may be checked out. ``new`` must descend from ``old``.
 
-        Not checked out: CAS ``update-ref``. Checked out: ``git merge --ff-only`` in
-        that worktree, so its index and files follow; refused when uncommitted local
-        changes overlap the paths the move changes (git's own check is the second
-        guard). Returns ``"update-ref"`` or ``"merge"``."""
-        holder = self.check_advance(ref, new, old)
-        if holder is None:
+        Not checked out: CAS ``update-ref``. Checked out: paths that already hold what the
+        move brings are first normalized (tracked ones restored to HEAD, untracked ones
+        removed, each checked before and after; on any surprise everything is put back and
+        nothing moves), then ``git merge --ff-only`` runs in that worktree, so its index and
+        files follow and those paths end up with the bytes they had. Refused when other
+        local changes overlap the move (git's own check is the second guard). Returns
+        ``"update-ref"`` or ``"merge"``."""
+        if plan is None:
+            plan = self.check_advance(ref, new, old)
+        if plan is None:
             self.update_refs([RefUpdate(ref, new, old)])
             return "update-ref"
+        holder = plan.holder
         head = self.rev(ref)
         if head != old:
             raise CASConflict(f"{short_ref(ref)} moved (expected {old[:10]}, found {str(head)[:10]})")
+        done = self.normalize(holder.path, plan.same)
         proc = self.run_bytes("merge", "--ff-only", "--quiet", new, cwd=holder.path, check=False)
         if proc.returncode != 0:
+            failed = self.restore(holder.path, done)
             raise Refused(
                 f"could not fast-forward {short_ref(ref)} at {holder.path}: "
-                + proc.stderr.decode("utf-8", "replace").strip()
+                + proc.stderr.decode("utf-8", "replace").strip() + _not_restored(failed)
             )
         return "merge"
+
+    def normalize(self, worktree: Path, same: Sequence["SamePath"]) -> list["_Saved"]:
+        """Bring each path back to HEAD (tracked) or remove it (untracked) so that a
+        fast-forward can write the landed version. Each path is re-checked right before
+        and after; on any mismatch the paths done so far are restored and
+        :class:`Refused` is raised."""
+        done: list[_Saved] = []
+        try:
+            for s in same:
+                p = worktree / s.path
+                if self._state(worktree, s.path) != (s.index, s.worktree):
+                    raise Refused(f"{s.path} changed while landing; nothing was moved, run the command again")
+                done.append(_Saved(s, p.read_bytes() if s.worktree is not None else None))
+                if s.head is not None:
+                    self.run_bytes("--literal-pathspecs", "checkout", "HEAD", "--", s.path, cwd=worktree)
+                    want = (s.head, s.head[1])
+                else:
+                    if s.index is not None:
+                        self.run_bytes("--literal-pathspecs", "update-index", "--force-remove", "--", s.path, cwd=worktree)
+                    if p.exists():
+                        p.unlink()
+                    want = (None, None)
+                if self._state(worktree, s.path) != want:
+                    raise Refused(f"could not normalize {s.path} before landing; nothing was moved")
+        except (Refused, GitError, OSError) as exc:
+            reason = str(exc) if isinstance(exc, Refused) else f"could not normalize before landing ({exc}); nothing was moved"
+            raise Refused(reason + _not_restored(self.restore(worktree, done))) from None
+        except BaseException:
+            self.restore(worktree, done)
+            raise
+        return done
+
+    def restore(self, worktree: Path, done: Sequence["_Saved"]) -> list[str]:
+        """Undo :meth:`normalize` for ``done`` (latest first): put back the saved bytes and
+        index entries of paths that are still as normalization left them. Returns the
+        paths that could not be put back (someone changed them meanwhile)."""
+        failed: list[str] = []
+        for saved in reversed(done):
+            s = saved.same
+            p = worktree / s.path
+            left = (s.head, s.head[1]) if s.head is not None else (None, None)
+            try:
+                if self._state(worktree, s.path) != left:
+                    failed.append(s.path)
+                    continue
+                if saved.data is not None:
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                    p.write_bytes(saved.data)
+                elif p.exists():
+                    p.unlink()
+                if s.index != left[0]:
+                    if s.index is None:
+                        self.run_bytes("--literal-pathspecs", "update-index", "--force-remove", "--", s.path, cwd=worktree)
+                    else:
+                        info = f"{s.index[0]},{s.index[1]},{s.path}"
+                        self.run_bytes("update-index", "--add", "--cacheinfo", info, cwd=worktree)
+            except (OSError, GitError):
+                failed.append(s.path)
+        return failed
+
+    def _state(self, worktree: Path, path: str) -> tuple[Optional[tuple[str, str]], Optional[str]]:
+        """``(index entry, clean-filter hash of the file)`` of one path (None when absent)."""
+        p = worktree / path
+        entries = self.index_entries(worktree, [path])
+        index = entries.get(path) if path not in entries or entries[path] is not None else ("<conflict>", "")
+        if p.is_file() and not p.is_symlink():
+            return index, self.hash_files(worktree, [path])[0]
+        return index, ("<not a file>" if p.exists() or p.is_symlink() else None)
 
     # ---- remote ------------------------------------------------------------
 

@@ -104,25 +104,32 @@ def require_tip(ctx: Ctx, ref: str, what: str) -> str:
     return tip
 
 
-def write_refs(ctx: Ctx, updates: Sequence[RefUpdate]) -> dict[str, str]:
+def write_refs(ctx: Ctx, updates: Sequence[RefUpdate], out: Optional[Out] = None) -> dict[str, str]:
     """Apply ref moves. Checked-out branches are fast-forwarded first (in their
     worktree); every other ref moves in one atomic CAS transaction.
 
     Every checked-out target is checked for overlapping uncommitted changes before
-    any ref moves, so a refusal means nothing was written."""
+    any ref moves, so a refusal means nothing was written. Local files that already
+    hold what a move brings do not count as overlapping (see :meth:`Git.overlap`);
+    they are listed in ``out`` as normalized."""
     holders = ctx.git.holders()
     held = [u for u in updates if u.ref in holders]
     rest = [u for u in updates if u.ref not in holders]
+    plans = {}
     for u in held:
         if u.new == ZERO:
             raise Refused(f"{short_ref(u.ref)} is checked out at {holders[u.ref].path}; not deleting it")
-        ctx.git.check_advance(u.ref, u.new, u.old)
+        plans[u.ref] = ctx.git.check_advance(u.ref, u.new, u.old)
     how: dict[str, str] = {}
     for u in held:
-        how[u.ref] = ctx.git.advance(u.ref, u.new, u.old)
+        how[u.ref] = ctx.git.advance(u.ref, u.new, u.old, plans[u.ref])
     ctx.git.update_refs(rest)
     for u in rest:
         how[u.ref] = "deleted" if u.new == ZERO else "update-ref"
+    normalized = sorted({s.path for plan in plans.values() if plan for s in plan.same})
+    if out is not None and normalized:
+        out.data["normalized"] = normalized
+        out.say("already committed, left as they are: " + ", ".join(normalized))
     return how
 
 
@@ -232,7 +239,7 @@ def cmd_new(ctx: Ctx, out: Out, a: argparse.Namespace) -> None:
     tree = ctx.git.build_tree(main_tip, changes)
     c1 = ctx.git.commit_tree(tree, [main_tip], f"project({name}): new")
     merge = ctx.git.commit_tree(tree, [main_tip, c1], f"Merge project/{name}: new")
-    how = write_refs(ctx, [RefUpdate(ctx.main, merge, main_tip), RefUpdate(pref, c1, ZERO)])
+    how = write_refs(ctx, [RefUpdate(ctx.main, merge, main_tip), RefUpdate(pref, c1, ZERO)], out)
     out.data.update(name=name, branch=short_ref(pref), commit=c1, main=merge, main_write=how[ctx.main])
     out.say(f"created {short_ref(pref)} at {c1[:10]} and merged into {short_ref(ctx.main)} ({merge[:10]}, {how[ctx.main]})")
     push_refs(ctx, out, pref, ctx.main)
@@ -326,18 +333,17 @@ def cmd_apply(ctx: Ctx, out: Out, a: argparse.Namespace) -> None:
     new_md = read_input(a.project_md)
     section = read_input(a.worklog_section)
     pref, cref = project_ref(name), content_ref(ctx.today)
-    errors = project_md.validate(new_md) + worklog.validate_section(section)
+    errors = worklog.validate_section(section)
     tip = ctx.git.rev(pref)
     if tip is None:
-        errors.append(f"branch {short_ref(pref)} does not exist")
+        errors = project_md.validate(new_md) + errors + [f"branch {short_ref(pref)} does not exist"]
     else:
         old_md = ctx.git.read_text(tip, project_md.project_path(name))
         if old_md is None:
+            errors = project_md.validate(new_md) + errors
             errors.append(f"{project_md.project_path(name)} is missing on {short_ref(pref)}")
         else:
-            dropped = project_md.dropped_sections(old_md, new_md)
-            if dropped:
-                errors.append("new PROJECT.md drops sections: " + ", ".join(f"'## {t}'" for t in dropped))
+            errors = project_md.check_update(old_md, new_md) + errors
     if errors:
         out.data["errors"] = errors
         raise Refused("; ".join(errors))
@@ -444,7 +450,7 @@ def cmd_land_content(ctx: Ctx, out: Out, a: argparse.Namespace) -> None:
         commit = ctx.git.commit_tree(tree, [main_tip], f"content: {day} daily snapshot")
         updates.append(RefUpdate(ctx.main, commit, main_tip))
     updates.append(RefUpdate(cref, ZERO, tip))
-    how = write_refs(ctx, updates)
+    how = write_refs(ctx, updates, out)
     out.data.update(date=day, commit=commit, paths=sorted(changes), deleted=short_ref(cref),
                     main_write=how.get(ctx.main))
     if commit:
@@ -499,7 +505,7 @@ def cmd_land_project(ctx: Ctx, out: Out, a: argparse.Namespace) -> None:
                if not p.startswith(scope) and p != index_md.INDEX_PATH]
     tree = ctx.git.build_tree(main_tip, changes)
     commit = ctx.git.commit_tree(tree, [main_tip, tip], f"Merge project/{name}: {a.milestone.strip()}")
-    how = write_refs(ctx, [RefUpdate(ctx.main, commit, main_tip)])
+    how = write_refs(ctx, [RefUpdate(ctx.main, commit, main_tip)], out)
     out.data.update(name=name, commit=commit, paths=sorted(changes), ignored=ignored, main_write=how[ctx.main])
     out.say(f"merged {short_ref(pref)} into {short_ref(ctx.main)}: {commit[:10]} ({len(changes)} path(s), {how[ctx.main]}); branch kept")
     if ignored:
@@ -583,14 +589,24 @@ def _emit(out: Out, as_json: bool) -> None:
             sys.stdout.write("\n".join(out.lines) + "\n")
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def utf8_streams() -> None:
     for stream in (sys.stdout, sys.stderr):
         try:
             stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
         except (AttributeError, ValueError):
             pass
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    utf8_streams()
     args = build_parser().parse_args(argv)
     key = {"update": getattr(args, "step", None), "land": f"land-{getattr(args, 'kind', '')}"}.get(args.cmd, args.cmd)
+    return run(args, key, HANDLERS)
+
+
+def run(args: argparse.Namespace, key: str, handlers: dict) -> int:
+    """Common driver: version, context set-up, dispatch to ``handlers[key]``, output and
+    exit codes. Shared by the ``project`` and ``content`` CLIs."""
     out = Out(command=key)
     if not Path(args.repo).is_dir():
         out.result = "usage-error"
@@ -626,7 +642,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 "update the engine"
             )
         ctx = Ctx(git=git, main=branch_ref(args.main), today=today, now=now, push=not args.no_push)
-        HANDLERS[key](ctx, out, args)
+        handlers[key](ctx, out, args)
     except UsageError as exc:
         out.result = "usage-error"
         out.say(f"error: {exc}")

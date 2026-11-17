@@ -89,7 +89,7 @@ class GitRefTests(WorkspaceCase):
                     self.g.advance("refs/heads/main", c, head)
                 for path in expected:
                     self.assertIn(path, str(cm.exception))
-                self.assertEqual(self.g.overlap(self.ws, head, c), expected)
+                self.assertEqual(self.g.overlap(self.ws, head, c).blocking, expected)
                 self.assertEqual(self.rev("main"), head)
                 self.git("reset", "-q", "--hard")
                 self.git("clean", "-qfd")
@@ -101,7 +101,7 @@ class GitRefTests(WorkspaceCase):
         head = self.rev("HEAD")
         c = self.commit_on(head, {"keep.log": "tracked now\n"})
         self.write("keep.log", "local ignored data\n")
-        self.assertEqual(self.g.overlap(self.ws, head, c), ["keep.log"])
+        self.assertEqual(self.g.overlap(self.ws, head, c).blocking, ["keep.log"])
 
     def test_advance_not_checked_out_uses_update_ref(self):
         self.git("switch", "-q", "-c", "scratch")

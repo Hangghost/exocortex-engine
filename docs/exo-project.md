@@ -1,4 +1,4 @@
-# `/exo:project` core (v0.1)
+# `/exo:project` core
 
 Project context management for a single-user, single-machine workspace repository:
 `new`, `load`, `update`, `board` and `land`. The deterministic part is the Python package
@@ -22,7 +22,15 @@ calls the CLI for everything else.
   block the write, **unless they overlap** the paths the new commit changes: a dirty path
   equal to a changed path, a dirty file where the commit adds a directory (or the reverse), or
   any existing file (untracked or ignored) where the commit adds a path. Then the command
-  refuses, lists every overlapping path and writes nothing. `git merge --ff-only` refuses
+  refuses, lists every overlapping path and writes nothing.
+  **Same content is not an overlap** (v0.2): a path whose file already holds exactly what the
+  commit brings (compared as `git add` would store it, so `core.autocrlf` working trees are
+  not misjudged; a deletion counts when the file is gone too) and whose index entry is HEAD's
+  or the landed one is normalized first (tracked: restored to HEAD; untracked: removed; each
+  re-checked right before and after, everything put back on any surprise) and then the
+  fast-forward writes it again, so it ends with the same bytes. This is what lets
+  `/exo:content` leave committed files in your working tree all day (see
+  [exo-content.md](exo-content.md)). `git merge --ff-only` refuses
   overlaps on its own as well; the command's check runs first so that a refusal is clean and
   covers every ref of the command (`new` moves `main` and creates `project/<name>`, and
   neither happens).
@@ -124,7 +132,7 @@ The workspace may pin the contract in `.exocortex/instance.toml` with a top-leve
    ```toml
    [project]
    dependencies = [
-     "exocortex-engine @ git+https://github.com/Hangghost/exocortex-engine@v0.1.1",
+     "exocortex-engine @ git+https://github.com/Hangghost/exocortex-engine@v0.2.0",
    ]
    ```
 
@@ -147,12 +155,12 @@ The workspace may pin the contract in `.exocortex/instance.toml` with a top-leve
    claude plugin install exo@exocortex-engine --scope project
    ```
 
-   The command is `/exo:project`. To update later:
+   The commands are `/exo:project` and `/exo:content`. To update later:
    `claude plugin marketplace update exocortex-engine` then
    `claude plugin update exo@exocortex-engine`.
 
-## Known limits (v0.1)
+## Known limits
 
 - One machine per workspace. Two machines writing the same `content/<date>` get a rejected
-  (non-fast-forward) push; v0.1 reports it and does not merge.
+  (non-fast-forward) push; it is reported, not merged.
 - No `resume`/`complete`/`pause`/`rename`, no multi-machine coordination, no scheduling.

@@ -21,10 +21,12 @@ class VersionConsistency(unittest.TestCase):
         v = pyproject_version()
         self.assertRegex(v, r"^\d+\.\d+\.\d+$")
         plugin = json.loads((ROOT / "plugins/exo/.claude-plugin/plugin.json").read_text(encoding="utf-8"))
-        prose = (ROOT / "plugins/exo/commands/project.md").read_text(encoding="utf-8")
-        declared = re.findall(r"需要的引擎版本：`([^`]+)`", prose)
         self.assertEqual(plugin["version"], v, "plugin.json")
-        self.assertEqual(declared, [v], "commands/project.md must declare exactly one required version")
+        commands = sorted((ROOT / "plugins/exo/commands").glob("*.md"))
+        self.assertEqual([c.name for c in commands], ["content.md", "project.md"])
+        for cmd in commands:
+            declared = re.findall(r"需要的引擎版本：`([^`]+)`", cmd.read_text(encoding="utf-8"))
+            self.assertEqual(declared, [v], f"commands/{cmd.name} must declare exactly one required version")
         self.assertEqual(exocortex_engine.__version__, v, "src/exocortex_engine/__init__.py")
 
     def test_marketplace_points_at_plugin(self):

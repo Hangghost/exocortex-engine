@@ -5,7 +5,7 @@ argument-hint: "new <name> | load <name> | update <name> | board | land content 
 
 # /exo:project
 
-需要的引擎版本：`0.1.1`
+需要的引擎版本：`0.2.0`
 
 引數：`$ARGUMENTS`
 
@@ -30,7 +30,7 @@ argument-hint: "new <name> | load <name> | update <name> | board | land content 
      - 套件：把工作區 `pyproject.toml` 的 `exocortex-engine @ git+https://github.com/Hangghost/exocortex-engine@v<版本>` 改成本檔需要的版本，再跑 `uv sync --active`
      - plugin：`claude plugin marketplace update exocortex-engine`，再 `claude plugin update exo@exocortex-engine`（更新後重開 session）
 3. **讀輸出**：CLI 第一行是 `result: ok|noop|rejected|error|usage-error`。退出碼 0 成功、1 被拒（前提不符，**零寫入**）、2 用法錯誤。被拒時把 `refused:`／`conflict:` 那行原樣轉告使用者並停下，不要自己繞過。`push <ref>: failed: …` 代表本機已寫入、push 失敗，照實回報，不要重試寫入。
-4. **main 的工作樹有未提交改動**（會前進 main 的 `new`、`land` 都適用）：未提交的改動（含 staged 與 untracked）不擋寫入，CLI 會以 fast-forward 讓工作樹跟上，改動原樣保留。只有這些路徑與這次寫入改到的路徑重疊時才會被拒，訊息會逐一列出重疊路徑；請使用者只處理（commit 或 stash）那幾個路徑後重跑，不要替使用者 stash 或還原。
+4. **main 的工作樹有未提交改動**（會前進 main 的 `new`、`land` 都適用）：未提交的改動（含 staged 與 untracked）不擋寫入，CLI 會以 fast-forward 讓工作樹跟上，改動原樣保留。只有這些路徑與這次寫入改到的路徑重疊、且**內容不同**時才會被拒，訊息會逐一列出重疊路徑；內容已與要寫入的版本相同的檔（例如 `/exo:content commit` 過、之後沒再改）不算重疊，輸出列在 `already committed, left as they are`，位元組不變。被拒時請使用者先 `/exo:content commit` 那幾個路徑（或 commit／stash）後重跑，不要替使用者 stash 或還原。
 
 依 `$ARGUMENTS` 的第一個詞選下面一段；沒給或不認得時，列出可用子命令後停下。
 

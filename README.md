@@ -9,6 +9,13 @@ Project context management for a workspace repository (`new`, `load`, `update`, 
 `land`): the stdlib-only package `exocortex_engine` plus the Claude Code plugin `exo` in this
 repository's marketplace. Contract, CLI and installation: [docs/exo-project.md](docs/exo-project.md).
 
+## `/exo:content`
+
+Commits what you wrote in the working tree to `content/<date>` and `project/<name>` without
+switching branches, recomputes the `contexts/<folder>/INDEX.md` navigation index on the
+branch, and lands it on `main` while the committed files stay in your working tree:
+[docs/exo-content.md](docs/exo-content.md).
+
 ```sh
 claude plugin marketplace add Hangghost/exocortex-engine
 claude plugin install exo@exocortex-engine --scope project
