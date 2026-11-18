@@ -45,6 +45,7 @@ Exit codes: `0` clean, `1` identifiers found, `2` the gate could not check.
 | Local | `commit-msg` | the commit message |
 | Local | `pre-push` | every file version, path and commit (message, names, emails) reachable from what is being pushed |
 | CI | `identifier-gate / gate` | the same as `pre-push`, for everything reachable from `HEAD` |
+| CI | `identifier-gate / gate` | every file in `.githooks` is mode `100755` (git silently skips a hook that is not executable) |
 | CI | `identifier-gate / tests` | unit tests on `ubuntu-latest` and `windows-latest` |
 
 `git commit --no-verify` skips the local commit hooks; `pre-push` and CI are the backstops.
@@ -57,6 +58,10 @@ Once per clone:
 ```sh
 git config core.hooksPath .githooks
 ```
+
+Without it git runs none of the hooks and says nothing. The unit tests check it: outside
+GitHub Actions, `python -m unittest discover -s tests` fails with the command above until
+`core.hooksPath` points at `.githooks`.
 
 The hooks look for `python3`, then `python`, then `py`, and set `PYTHONUTF8=1` so output works
 on a cp950 Windows console. They run the script with the base interpreter, so no virtual

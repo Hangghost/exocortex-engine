@@ -141,6 +141,71 @@ class StagedTests(GateCase):
         self.assertIn("author-ident: P1", proc.stdout)
 
 
+# Synthetic Chinese identifiers. FAKE_ZH is invalid UTF-8 once encoded as cp950; the cp950
+# bytes of FAKE_ZH_AMBIGUOUS also decode as valid (wrong) UTF-8 text, which a UTF-8-first
+# decoder would scan instead of the real characters.
+FAKE_ZH = "虛構代號"
+FAKE_ZH_AMBIGUOUS = "羅蘇簡"
+ZH_LIST = f"patterns:\n  - 'ZZ-FAKE-ID-\\d{{4}}'\n  - '{FAKE_ZH}'\n  - '{FAKE_ZH_AMBIGUOUS}'\n"
+
+
+class EncodingTests(GateCase):
+    """Big5 / cp950 content, as a Traditional Chinese Windows machine may write it."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.write_list(ZH_LIST)
+
+    def add_bytes(self, name: str, data: bytes) -> None:
+        (self.repo / name).write_bytes(data)
+        self.git("add", "--", name)
+
+    def test_cp950_identifier_is_found(self) -> None:
+        self.add_bytes("big5.txt", f"第一行\n代號 {FAKE_ZH} 在此\n".encode("cp950"))
+        proc = self.gate("staged")
+        self.assertEqual(proc.returncode, 1, proc.all)
+        self.assertIn("big5.txt:2: P2", proc.stdout)
+
+    def test_cp950_that_is_also_valid_utf8_is_found(self) -> None:
+        data = f"name: {FAKE_ZH_AMBIGUOUS}\n".encode("cp950")
+        self.assertNotEqual(data.decode("utf-8"), data.decode("cp950"))  # the trap is real
+        self.add_bytes("ambiguous.txt", data)
+        proc = self.gate("staged")
+        self.assertEqual(proc.returncode, 1, proc.all)
+        self.assertIn("ambiguous.txt:1: P3", proc.stdout)
+
+    def test_utf8_chinese_still_found_and_shared_hits_reported_once(self) -> None:
+        self.add("utf8.txt", f"代號 {FAKE_ZH}\n測試 {FAKE}\n")
+        proc = self.gate("staged")
+        self.assertEqual(proc.returncode, 1, proc.all)
+        self.assertIn("utf8.txt:1: P2", proc.stdout)
+        self.assertEqual(proc.stdout.count("utf8.txt:2: P1"), 1, proc.stdout)
+
+    def test_cp950_commit_message(self) -> None:
+        msg = self.tmp / "MSG"
+        msg.write_bytes(f"feat: 修正\n\n參考 {FAKE_ZH}\n".encode("cp950"))
+        proc = self.gate("message", str(msg))
+        self.assertEqual(proc.returncode, 1, proc.all)
+        self.assertIn("commit message:3: P2", proc.stdout)
+
+    def test_cp950_in_history_is_redacted(self) -> None:
+        self.add_bytes("big5.txt", f"{FAKE_ZH}\n".encode("cp950"))
+        self.commit("feat: big5")
+        proc = self.gate("history", "HEAD", GITHUB_ACTIONS="true")
+        self.assertEqual(proc.returncode, 1, proc.all)
+        self.assertIn("big5.txt:1: P2", proc.stdout)
+        self.assertNotIn(FAKE_ZH, proc.all)
+
+    def test_decodings(self) -> None:
+        decodings = identifier_gate.decodings
+        self.assertEqual(decodings(b"plain ascii\n"), ["plain ascii\n"])
+        self.assertEqual(decodings("中文".encode("utf-8")), ["中文"])  # not valid cp950
+        self.assertEqual(decodings(FAKE_ZH.encode("cp950")), [FAKE_ZH])
+        self.assertIn(FAKE_ZH_AMBIGUOUS, decodings(FAKE_ZH_AMBIGUOUS.encode("cp950")))
+        self.assertEqual(decodings("x".encode("utf-16")), ["x"])
+        self.assertEqual(decodings(b"\xff\x00\x80"), ["\ufffd\x00\ufffd"])  # binary: replace
+
+
 class FailClosedTests(GateCase):
     def setUp(self) -> None:
         super().setUp()

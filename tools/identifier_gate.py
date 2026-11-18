@@ -135,15 +135,39 @@ class Scanner:
                 if m:
                     self.hits.append(Hit(subject, field, lineno if multiline else 0, pid, m.group(0)))
 
+    def scan_bytes(self, subject: str, data: bytes) -> None:
+        """Scan every reading of `data` (see `decodings`) as one item; a hit that two
+        readings share is reported once."""
+        start, scanned = len(self.hits), self.scanned
+        for text in decodings(data):
+            self.scan(subject, "", text)
+        self.hits[start:] = list(dict.fromkeys(self.hits[start:]))
+        self.scanned = scanned + 1
+
     def scan_blob(self, path: str, data: bytes) -> None:
         self.scan(path, "path", path, multiline=False)
-        self.scan(path, "", decode(data))
+        self.scan_bytes(path, data)
 
 
-def decode(data: bytes) -> str:
+def decodings(data: bytes) -> list[str]:
+    """The readings of `data` to scan: UTF-16 with a BOM, else UTF-8 and/or cp950 (Big5).
+
+    Short cp950 text is often also valid UTF-8 by accident (about 1 in 100 two-character
+    strings), so when strict UTF-8 succeeds on non-ASCII data that strict cp950 also
+    decodes, both readings are scanned: a missed identifier costs more than a second scan.
+    Data that neither decodes strictly (binary, mixed encodings) falls back to UTF-8
+    with replacement, as before."""
     if data[:2] in (b"\xff\xfe", b"\xfe\xff"):
-        return data.decode("utf-16", errors="replace")
-    return data.decode("utf-8", errors="replace")
+        return [data.decode("utf-16", errors="replace")]
+    readings = []
+    for codec in ("utf-8", "cp950"):
+        try:
+            readings.append(data.decode(codec))
+        except UnicodeDecodeError:
+            pass
+        if readings and readings[0].isascii():
+            return readings
+    return readings or [data.decode("utf-8", errors="replace")]
 
 
 def fsdecode(raw: bytes) -> str:
@@ -268,7 +292,7 @@ def main(argv: list[str] | None = None) -> int:
                 text = Path(args.file).read_bytes()
             except OSError as exc:
                 raise GateError(f"cannot read commit message file ({type(exc).__name__})") from None
-            scanner.scan("commit message", "", decode(text))
+            scanner.scan_bytes("commit message", text)
         elif args.mode == "history":
             scan_history(git, scanner, args.revs)
         else:

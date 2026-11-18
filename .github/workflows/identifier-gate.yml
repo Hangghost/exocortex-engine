@@ -35,6 +35,26 @@ jobs:
           (umask 077 && printf '%s\n' "$EXO_IDENTIFIERS" > "$list")
           unset EXO_IDENTIFIERS
           EXO_IDENTIFIERS_FILE="$list" python tools/identifier_gate.py --redact history HEAD
+      - name: Hooks are executable (mode 100755)
+        # git skips a hook that is not executable with only a hint, so the gate would go silent.
+        # Runs even when the scan failed, so both results are reported.
+        if: success() || failure()
+        shell: bash
+        run: |
+          listing=$(git ls-files -s -- .githooks)
+          if [ -z "$listing" ]; then
+            echo "::error::No files are tracked under .githooks."
+            exit 1
+          fi
+          bad=0
+          while IFS=$'\t' read -r meta path; do
+            mode=${meta%% *}
+            if [ "$mode" != "100755" ]; then
+              echo "::error file=$path::$path is mode $mode, not 100755; git would skip it. Fix: git update-index --chmod=+x $path"
+              bad=1
+            fi
+          done <<< "$listing"
+          exit "$bad"
 
   tests:
     strategy:
