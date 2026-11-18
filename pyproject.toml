@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools>=64"]
+# 77 is the first setuptools that accepts an SPDX string for `license` (PEP 639).
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -10,6 +11,7 @@ name = "exocortex-engine"
 version = "0.2.0"
 description = "Shared engine for Exocortex workspaces: /exo:project and /exo:content (stdlib only)."
 readme = "README.md"
+license = "Apache-2.0"
 requires-python = ">=3.10"
 dependencies = []
 

@@ -118,3 +118,7 @@ python tools/identifier_gate.py message FILE      # what commit-msg runs
 python tools/identifier_gate.py history HEAD      # what CI runs
 python -m unittest discover -s tests -v           # tests use synthetic lists only
 ```
+
+## License
+
+Apache License 2.0; see [`LICENSE`](LICENSE).
