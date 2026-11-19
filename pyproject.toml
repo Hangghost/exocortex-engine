@@ -5,11 +5,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "exocortex-engine"
-# Single version source. plugins/exo/.claude-plugin/plugin.json, the command prose
-# (plugins/exo/commands/*.md) and src/exocortex_engine/__init__.py must match;
+# Single version source. plugins/exo/.claude-plugin/plugin.json, the command and skill prose
+# (plugins/exo/commands/*.md, plugins/exo/skills/*/SKILL.md) and src/exocortex_engine/__init__.py must match;
 # tests/test_version.py enforces it.
-version = "0.2.0"
-description = "Shared engine for Exocortex workspaces: /exo:project and /exo:content (stdlib only)."
+version = "0.3.0"
+description = "Shared engine for Exocortex workspaces: /exo:project, /exo:content and /exo:discuss (stdlib only)."
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"

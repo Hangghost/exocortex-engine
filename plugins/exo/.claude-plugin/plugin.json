@@ -1,7 +1,7 @@
 {
   "name": "exo",
-  "version": "0.2.0",
-  "description": "Exocortex workspace commands: /exo:project (new, load, update, board, land) and /exo:content (status, commit, land).",
+  "version": "0.3.0",
+  "description": "Exocortex workspace commands: /exo:project (new, load, update, board, land), /exo:content (status, commit, land) and /exo:discuss (discussion partner).",
   "author": {
     "name": "Hangghost"
   },

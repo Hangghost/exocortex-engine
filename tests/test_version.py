@@ -24,9 +24,12 @@ class VersionConsistency(unittest.TestCase):
         self.assertEqual(plugin["version"], v, "plugin.json")
         commands = sorted((ROOT / "plugins/exo/commands").glob("*.md"))
         self.assertEqual([c.name for c in commands], ["content.md", "project.md"])
-        for cmd in commands:
+        skills = sorted((ROOT / "plugins/exo/skills").glob("*/SKILL.md"))
+        self.assertEqual([s.parent.name for s in skills], ["discuss"])
+        for cmd in [*commands, *skills]:
             declared = re.findall(r"需要的引擎版本：`([^`]+)`", cmd.read_text(encoding="utf-8"))
-            self.assertEqual(declared, [v], f"commands/{cmd.name} must declare exactly one required version")
+            rel = cmd.relative_to(ROOT / "plugins/exo").as_posix()
+            self.assertEqual(declared, [v], f"{rel} must declare exactly one required version")
         self.assertEqual(exocortex_engine.__version__, v, "src/exocortex_engine/__init__.py")
 
     def test_marketplace_points_at_plugin(self):

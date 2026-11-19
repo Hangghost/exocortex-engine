@@ -16,6 +16,13 @@ switching branches, recomputes the `contexts/<folder>/INDEX.md` navigation index
 branch, and lands it on `main` while the committed files stay in your working tree:
 [docs/exo-content.md](docs/exo-content.md).
 
+## `/exo:discuss`
+
+A discussion partner: a decision tree asked one full round at a time, each question with a
+recommended answer; it writes the outcome to `contexts/thought_review/` through
+`/exo:content commit` and records where it was handed off. It does not implement anything:
+[docs/exo-discuss.md](docs/exo-discuss.md).
+
 ```sh
 claude plugin marketplace add Hangghost/exocortex-engine
 claude plugin install exo@exocortex-engine --scope project

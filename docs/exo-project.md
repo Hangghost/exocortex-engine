@@ -132,7 +132,7 @@ The workspace may pin the contract in `.exocortex/instance.toml` with a top-leve
    ```toml
    [project]
    dependencies = [
-     "exocortex-engine @ git+https://github.com/Hangghost/exocortex-engine@v0.2.0",
+     "exocortex-engine @ git+https://github.com/Hangghost/exocortex-engine@v0.3.0",
    ]
    ```
 
@@ -155,7 +155,7 @@ The workspace may pin the contract in `.exocortex/instance.toml` with a top-leve
    claude plugin install exo@exocortex-engine --scope project
    ```
 
-   The commands are `/exo:project` and `/exo:content`. To update later:
+   The commands are `/exo:project`, `/exo:content` and `/exo:discuss`. To update later:
    `claude plugin marketplace update exocortex-engine` then
    `claude plugin update exo@exocortex-engine`.
 
