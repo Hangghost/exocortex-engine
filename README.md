@@ -128,4 +128,4 @@ python -m unittest discover -s tests -v           # tests use synthetic lists on
 
 ## License
 
-Apache License 2.0; see [`LICENSE`](LICENSE).
+Apache License 2.0; see [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
