@@ -23,6 +23,23 @@ recommended answer; it writes the outcome to `contexts/thought_review/` through
 `/exo:content commit` and records where it was handed off. It does not implement anything:
 [docs/exo-discuss.md](docs/exo-discuss.md).
 
+## `/exo:decision-ui`
+
+Offline batch decisions: a deterministic renderer turns a queue of items into one
+self-contained HTML page, you mark them in a browser, export a decisions JSON, and an applier
+you write for that queue applies it (dry-run, fail-fast, idempotent). The package part is
+`python -m exocortex_engine.decision_ui render|validate`
+(`exocortex_engine.decision_ui`); the method is in
+[plugins/exo/skills/decision-ui/SKILL.md](plugins/exo/skills/decision-ui/SKILL.md).
+
+## `/exo:doc-formatter`
+
+Formats pasted or drafted content into a workspace document (`work_log`, `survey`,
+`thought_review`, `blog`): type, `l0` frontmatter for the navigation index, path and file
+name under `contexts/<folder>/`; after you confirm the preview it commits through
+`/exo:content`:
+[plugins/exo/skills/doc-formatter/SKILL.md](plugins/exo/skills/doc-formatter/SKILL.md).
+
 ```sh
 claude plugin marketplace add Hangghost/exocortex-engine
 claude plugin install exo@exocortex-engine --scope project

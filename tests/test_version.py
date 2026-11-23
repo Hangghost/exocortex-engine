@@ -25,7 +25,7 @@ class VersionConsistency(unittest.TestCase):
         commands = sorted((ROOT / "plugins/exo/commands").glob("*.md"))
         self.assertEqual([c.name for c in commands], ["content.md", "project.md"])
         skills = sorted((ROOT / "plugins/exo/skills").glob("*/SKILL.md"))
-        self.assertEqual([s.parent.name for s in skills], ["discuss"])
+        self.assertEqual([s.parent.name for s in skills], ["decision-ui", "discuss", "doc-formatter"])
         for cmd in [*commands, *skills]:
             declared = re.findall(r"需要的引擎版本：`([^`]+)`", cmd.read_text(encoding="utf-8"))
             rel = cmd.relative_to(ROOT / "plugins/exo").as_posix()
