@@ -255,6 +255,94 @@ def is_generated_index(folder: str, text: Optional[str]) -> bool:
     return text is not None and text.startswith(f"# contexts/{folder}/ — L0 導航索引\n")
 
 
+def folder_is_indexed(git: "Git", base: Optional[str], folder: str) -> bool:
+    """Whether ``contexts/<folder>/`` gets a generated index: a managed folder, or one
+    whose existing index at ``base`` is one this module wrote."""
+    if folder in MANAGED_FOLDERS:
+        return True
+    existing = git.read_text(base, f"contexts/{folder}/{INDEX_NAME}") if base else None
+    return is_generated_index(folder, existing)
+
+
+def regen_folder(
+    git: "Git", base: Optional[str], folder: str, upserts: Mapping[str, str],
+    deletes: Iterable[str] = (), write: bool = True,
+) -> tuple[dict[str, Optional[tuple[str, str]]], list[str], list[str]]:
+    """Recompute ``contexts/<folder>/INDEX*.md`` from the folder at ``base`` plus a batch
+    (``upserts``: ``{basename: text}``, ``deletes``: basenames).
+
+    Returns ``(changes, generated, rejects)``: tree changes (``path -> (mode, blob)`` or
+    None for a removed file) for only the index files that differ from ``base``, the
+    paths among them, and messages for files whose frontmatter cannot be read."""
+    from .gitref import FILE_MODE
+
+    prefix = f"contexts/{folder}/"
+    files = folder_texts_at(git, base, folder) if base else {}
+    files.update(upserts)
+    for name in deletes:
+        files.pop(name, None)
+    try:
+        out = index_texts(folder, files)
+    except FrontmatterError as exc:
+        return {}, [], [
+            f"{prefix}{exc.filename}: the frontmatter uses YAML the index cannot read ({exc.reason}); "
+            "simplify it (plain `key: value` lines, lists, quoted strings)"
+        ]
+    current = git.entries(base, [prefix + n for n in out]) if base else {}
+    changes: dict[str, Optional[tuple[str, str]]] = {}
+    generated: list[str] = []
+    for name, text in out.items():
+        path = prefix + name
+        if text is None:
+            if path in current:
+                changes[path] = None
+                generated.append(path)
+            continue
+        sha = git.hash_blob(text.encode("utf-8"), write=write)
+        if current.get(path, ("", ""))[1] != sha:
+            changes[path] = (FILE_MODE, sha)
+            generated.append(path)
+    return changes, generated, []
+
+
+_FOLDER_FILE = re.compile(r"^contexts/([^/]+)/([^/]+\.md)$")
+
+
+def regen_for_changes(
+    git: "Git", base: Optional[str], changes: Mapping[str, Optional[tuple[str, str]]], write: bool = True,
+) -> tuple[dict[str, Optional[tuple[str, str]]], list[str]]:
+    """The generated-index changes that a set of tree ``changes`` (``path -> (mode, blob)``
+    or None) on top of ``base`` calls for, for every indexed folder the batch touches.
+
+    Used by writers that commit straight to a branch (``update``, ``land``) so the index
+    never lags the files it lists. Returns ``(index_changes, rejects)``."""
+    by_folder: dict[str, tuple[dict[str, str], list[str]]] = {}
+    blobs_needed: dict[str, str] = {}
+    for path, entry in changes.items():
+        m = _FOLDER_FILE.match(path)
+        if not m or _generated.is_contexts_index_path(path):
+            continue
+        folder, name = m.groups()
+        ups, dels = by_folder.setdefault(folder, ({}, []))
+        if entry is None:
+            dels.append(name)
+        else:
+            ups[name] = entry[1]
+            blobs_needed[entry[1]] = entry[1]
+    blobs = git.cat_blobs(list(blobs_needed)) if blobs_needed else {}
+    out: dict[str, Optional[tuple[str, str]]] = {}
+    rejects: list[str] = []
+    for folder in sorted(by_folder):
+        if not folder_is_indexed(git, base, folder):
+            continue
+        ups, dels = by_folder[folder]
+        texts = {name: decode(blobs[sha]) for name, sha in ups.items()}
+        ch, _gen, rej = regen_folder(git, base, folder, texts, dels, write)
+        out.update(ch)
+        rejects.extend(rej)
+    return out, rejects
+
+
 # ---- reading a folder ----------------------------------------------------------------
 
 

@@ -23,7 +23,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
-from . import CONTRACT, __version__, index_md, project_md, worklog
+from . import CONTRACT, __version__, contexts_index, generated_files, index_md, project_md, worklog
 from .gitref import (
     ZERO,
     CASConflict,
@@ -374,7 +374,11 @@ def cmd_apply(ctx: Ctx, out: Out, a: argparse.Namespace) -> None:
     summary = a.worklog_l0 or (fm.get("l0") if fm else "") or ""
     l0 = summary if a.worklog_l0 else f"{name} 進度更新（{ctx.today}）：{summary}"
     wl_text = worklog.append(existing, name=name, date=ctx.today, hhmm=ctx.now, body=section, l0=l0)
-    c_tree = ctx.git.build_tree(c_base, ctx.git.blob_changes({wl_path: wl_text}))
+    c_changes = ctx.git.blob_changes({wl_path: wl_text})
+    # The work_log is listed in contexts/work_logs/INDEX.md: recompute it in the same commit.
+    idx_changes, idx_rejects = contexts_index.regen_for_changes(ctx.git, c_base, c_changes)
+    c_changes.update(idx_changes)
+    c_tree = ctx.git.build_tree(c_base, c_changes)
     c_commit = ctx.git.commit_tree(c_tree, [c_base], f"content: {name} update {ctx.today} {ctx.now}")
     updates.append(RefUpdate(cref, c_commit, c_tip or ZERO))
     write_refs(ctx, updates)
@@ -388,6 +392,8 @@ def cmd_apply(ctx: Ctx, out: Out, a: argparse.Namespace) -> None:
         out.say(f"{short_ref(pref)}: unchanged")
     if index_note:
         out.say(index_note)
+    for msg in idx_rejects:
+        out.say(f"warning: index not regenerated: {msg}")
     verb = "appended ## " + ctx.now + " to" if existing is not None else "created"
     out.say(f"{short_ref(cref)}: {c_commit[:10]} ({verb} {wl_path})")
     push_refs(ctx, out, *([pref] if p_commit else []), cref)
@@ -440,9 +446,20 @@ def cmd_land_content(ctx: Ctx, out: Out, a: argparse.Namespace) -> None:
     main_tip = require_tip(ctx, ctx.main, "branch")
     base = ctx.git.merge_base(main_tip, tip)
     changes, conflicts = three_way_changes(ctx.git, base, main_tip, tip)
+    # Generated indexes are recomputed on main from the merged folder, never copied from the
+    # branch: a stale one on the branch must not land, and a main-side edit is no conflict.
+    def _is_generated(path: str) -> bool:
+        m = generated_files.CONTEXTS_INDEX_PATH_RE.match(path)
+        return bool(m) and contexts_index.folder_is_indexed(ctx.git, main_tip, m.group(1))
+    changes = {p: e for p, e in changes.items() if not _is_generated(p)}
+    conflicts = [p for p in conflicts if not _is_generated(p)]
     if conflicts:
         out.data["conflicts"] = conflicts
         raise Refused(f"changed on both {short_ref(ctx.main)} and {short_ref(cref)}: " + ", ".join(conflicts))
+    idx_changes, idx_rejects = contexts_index.regen_for_changes(ctx.git, main_tip, changes)
+    if idx_rejects:
+        raise Refused("; ".join(idx_rejects))
+    changes.update(idx_changes)
     updates = []
     commit = None
     if changes:

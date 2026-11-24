@@ -222,10 +222,8 @@ def _index_folders(git: Git, target: Target) -> list[str]:
         m = _FOLDER_MD.match(item.path)
         if not m or m.group(1) in folders:
             continue
-        f = m.group(1)
-        existing = git.read_text(target.base, f"contexts/{f}/{contexts_index.INDEX_NAME}") if target.base else None
-        if f in contexts_index.MANAGED_FOLDERS or contexts_index.is_generated_index(f, existing):
-            folders.append(f)
+        if contexts_index.folder_is_indexed(git, target.base, m.group(1)):
+            folders.append(m.group(1))
     return sorted(folders)
 
 
@@ -233,33 +231,13 @@ def _regen_index(git: Git, target: Target, texts: dict[str, str], write: bool) -
     """Recompute ``contexts/<folder>/INDEX*.md`` from the branch plus this batch."""
     for folder in _index_folders(git, target):
         prefix = f"contexts/{folder}/"
-        files = contexts_index.folder_texts_at(git, target.base, folder) if target.base else {}
-        for path in target.writes:
-            if path.startswith(prefix) and "/" not in path[len(prefix):]:
-                files[path[len(prefix):]] = texts[path]
-        for path in target.deletes:
-            if path.startswith(prefix):
-                files.pop(path[len(prefix):], None)
-        try:
-            out = contexts_index.index_texts(folder, files)
-        except contexts_index.FrontmatterError as exc:
-            target.rejects.append(
-                f"{prefix}{exc.filename}: the frontmatter uses YAML the index cannot read ({exc.reason}); "
-                "simplify it (plain `key: value` lines, lists, quoted strings)"
-            )
-            continue
-        current = git.entries(target.base, [prefix + n for n in out]) if target.base else {}
-        for name, text in out.items():
-            path = prefix + name
-            if text is None:
-                if path in current:
-                    target.changes[path] = None
-                    target.generated.append(path)
-                continue
-            sha = git.hash_blob(text.encode("utf-8"), write=write)
-            if current.get(path, ("", ""))[1] != sha:
-                target.changes[path] = (FILE_MODE, sha)
-                target.generated.append(path)
+        direct = lambda p: p.startswith(prefix) and "/" not in p[len(prefix):]  # noqa: E731
+        upserts = {p[len(prefix):]: texts[p] for p in target.writes if direct(p)}
+        deletes = [p[len(prefix):] for p in target.deletes if p.startswith(prefix)]
+        changes, generated, rejects = contexts_index.regen_folder(git, target.base, folder, upserts, deletes, write)
+        target.changes.update(changes)
+        target.generated.extend(generated)
+        target.rejects.extend(rejects)
 
 
 def _project_md(git: Git, target: Target, name: str, texts: dict[str, str], today: str) -> None:
