@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Sequence
 
-from . import contexts_index, index_md, project_md
+from . import contexts_index, index_md, project_md, roadmap
 from .generated_files import is_contexts_index_path
 from .gitref import FILE_MODE, ZERO, Git, RefUpdate, Refused, short_ref
 from .project import (
@@ -263,6 +263,13 @@ def _project_md(git: Git, target: Target, name: str, texts: dict[str, str], toda
             )
 
 
+def _roadmap(target: Target, name: str, texts: dict[str, str]) -> None:
+    """``projects/<name>/ROADMAP.yaml`` lands only when the roadmap validator passes."""
+    path = roadmap.roadmap_path(name)
+    if path in target.writes:
+        target.rejects.extend(f"{path}: {f.describe()}" for f in roadmap.validate_text(texts[path], name))
+
+
 def _rider(git: Git, targets: dict[str, Target], index_item: Optional[Item], local: str, notes: list[str],
            write: bool) -> None:
     """Carry each committed project's own row of a locally edited ``projects/INDEX.md``."""
@@ -409,6 +416,7 @@ def make_plan(ctx: Ctx, only: Sequence[str], write: bool) -> Plan:
     for name, t in projects.items():
         if t.base:
             _project_md(git, t, name, texts, ctx.today)
+            _roadmap(t, name, texts)
     if index_item is not None:
         local = _texts(git, top, [index_item], write).get(index_item.path, "")
         _rider(git, {n: t for n, t in projects.items() if t.base}, index_item, local, notes, write)
