@@ -73,6 +73,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      # tests/test_persona_presence.py runs the plugin's node hook. Without node it fails
+      # under CI (it must never be skipped into a pass), so every matrix cell guarantees node.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Require node
+        run: node --version
       # Identifier gate and /exo:project core (tests/test_*.py); synthetic data only.
       - name: Unit tests (synthetic data only)
         run: python -m unittest discover -s tests -v
