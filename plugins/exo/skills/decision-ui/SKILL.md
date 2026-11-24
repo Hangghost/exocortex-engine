@@ -10,7 +10,7 @@ argument-hint: "[render <spec.json> --out <page.html> | validate <decisions.json
 
 # /exo:decision-ui：離線批次決策交換
 
-需要的引擎版本：`0.4.0`
+需要的引擎版本：`0.4.1`
 
 引數：`$ARGUMENTS`
 

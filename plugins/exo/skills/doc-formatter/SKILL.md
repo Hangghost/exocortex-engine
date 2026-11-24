@@ -9,7 +9,7 @@ argument-hint: "[<類型：work_log|survey|thought_review|blog>] [<主題或要�
 
 # /exo:doc-formatter：把內容整理成合規文檔
 
-需要的引擎版本：`0.4.0`
+需要的引擎版本：`0.4.1`
 
 引數：`$ARGUMENTS`
 

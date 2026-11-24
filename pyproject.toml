@@ -8,7 +8,7 @@ name = "exocortex-engine"
 # Single version source. plugins/exo/.claude-plugin/plugin.json, the command and skill prose
 # (plugins/exo/commands/*.md, plugins/exo/skills/*/SKILL.md) and src/exocortex_engine/__init__.py must match;
 # tests/test_version.py enforces it.
-version = "0.4.0"
+version = "0.4.1"
 description = "Shared engine for Exocortex workspaces: /exo:project, /exo:content, /exo:discuss, /exo:decision-ui and /exo:doc-formatter (stdlib only)."
 readme = "README.md"
 license = "Apache-2.0"

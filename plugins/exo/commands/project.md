@@ -5,7 +5,7 @@ argument-hint: "new <name> | load <name> | update <name> | board | land content 
 
 # /exo:project
 
-需要的引擎版本：`0.4.0`
+需要的引擎版本：`0.4.1`
 
 引數：`$ARGUMENTS`
 

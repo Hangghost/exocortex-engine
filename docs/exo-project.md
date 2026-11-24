@@ -132,7 +132,7 @@ The workspace may pin the contract in `.exocortex/instance.toml` with a top-leve
    ```toml
    [project]
    dependencies = [
-     "exocortex-engine @ git+https://github.com/Hangghost/exocortex-engine@v0.4.0",
+     "exocortex-engine @ git+https://github.com/Hangghost/exocortex-engine@v0.4.1",
    ]
    ```
 
