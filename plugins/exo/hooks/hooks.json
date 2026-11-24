@@ -1,0 +1,16 @@
+{
+  "description": "Warn at session start when the persona plugin a workspace declares is not installed or enabled in this config directory",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/check-persona.mjs\""
+          }
+        ]
+      }
+    ]
+  }
+}
