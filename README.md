@@ -143,6 +143,11 @@ python tools/identifier_gate.py history HEAD      # what CI runs
 python -m unittest discover -s tests -v           # tests use synthetic lists only
 ```
 
+`--redact` (never print matched text) is a global option, so it goes before the subcommand:
+`python tools/identifier_gate.py --redact staged`. Placed after it
+(`identifier_gate.py staged --redact`), argparse rejects it with exit 2, which looks like a gate
+block but is only a usage error.
+
 ## License
 
 Apache License 2.0; see [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
