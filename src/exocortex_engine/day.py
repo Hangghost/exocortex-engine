@@ -217,18 +217,28 @@ def _progress(ctx: Ctx, name: str, uncommitted: int) -> dict[str, Any]:
     today_path = worklog.worklog_path(ctx.today, name)
     today_on = [short_ref(r) for r in (content_ref(ctx.today), ctx.main)
                 if ctx.git.rev(r) and ctx.git.read_bytes(r, today_path) is not None]
-    last, since = None, None
+    last, since, after_update, update_day = None, None, None, None
     if tip is not None:
-        last = ctx.git.run("log", "-1", "--format=%H", tip, "--", project_md.project_path(name)).strip() or None
+        line = ctx.git.run("log", "-1", "--format=%H%x09%cs%x09%s", tip, "--", project_md.project_path(name)).strip()
+        last, last_day, subject = (line.split("\t", 2) + ["", ""])[:3] if line else (None, "", "")
         since = _count(ctx, last, tip) if last else _count(ctx, ctx.main, tip)
+        after_update = since
+        if last and subject.startswith(f"project({name}): update "):
+            # An update covers the day it was made: the commits that day after it (eod commits
+            # the project's files right after updating) are already in that day's work_log.
+            update_day = last_day
+            days = ctx.git.run("log", "--format=%cs", f"{last}..{tip}").split()
+            after_update = sum(1 for d in days if d > last_day)
     return {
         "branch": short_ref(pref) if tip else None,
         "last_project_md_commit": last,
         "commits_since_project_md": since,
+        "update_day": update_day,
+        "commits_since_update": after_update,
         "uncommitted": uncommitted,
         "today_worklog": today_path,
         "today_worklog_on": today_on,
-        "has_progress": bool(since) or uncommitted > 0,
+        "has_progress": bool(after_update) or uncommitted > 0,
     }
 
 

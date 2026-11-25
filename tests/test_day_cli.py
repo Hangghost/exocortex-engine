@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 import unittest
+from datetime import date, timedelta
 from pathlib import Path
 
 from _workspace import WorkspaceCase
@@ -16,6 +17,7 @@ from exocortex_engine.project import Ctx
 
 DAY = WorkspaceCase.TODAY  # 2026-03-10
 YESTERDAY = "2026-03-09"
+TOMORROW = "2026-03-11"
 SECTION = "### 進展\n\n- did a thing\n\n### 經驗與觀察\n\n- learned\n\n### 下一步\n\n- next thing\n"
 
 
@@ -199,6 +201,43 @@ class SurveyTests(DayCase):
         self.assertEqual((pr["commits_since_project_md"], pr["has_progress"]), (0, False))
         self.assertEqual(pr["today_worklog"], f"contexts/work_logs/{DAY}_alpha_update.md")
         self.assertEqual(pr["today_worklog_on"], [f"content/{DAY}"])
+
+    def test_eod_closing_commit_is_not_progress_the_next_day(self):
+        """``/exo:eod`` updates PROJECT.md first and commits the project's files after, so
+        ``project/<name>`` always ends with one commit newer than PROJECT.md. That commit was
+        already covered by the update and must not read as progress the next day."""
+        self.write("projects/alpha/report.md", "the day's work\n")
+        self.assertEqual(self.survey()["projects"][0]["progress"]["uncommitted"], 1)
+        md = (
+            "---\nlast_updated: 2026-01-02\nstatus: active\nl0: alpha after eod\n---\n\n# Alpha\n\n"
+            "## 目標 / 動機\n\ngoal\n\n## 現況\n\nreport drafted\n\n## 下一步\n\n- next\n"
+        )
+        p = self.mod("project", "update", "alpha", "apply", "--project-md", self.tmpfile("p.md", md),
+                     "--worklog-section", self.tmpfile("s.md", SECTION))
+        self.assertEqual(p.returncode, 0, p.stdout)
+        self.commit_content("projects/alpha/report.md")  # eod step 5, after the update
+        for today in (DAY, TOMORROW):
+            pr = self.survey(today=today)["projects"][0]["progress"]
+            self.assertFalse(pr["has_progress"], today)
+            self.assertEqual(pr["commits_since_project_md"], 1)  # the raw count keeps its meaning
+            self.assertEqual((pr["commits_since_update"], pr["uncommitted"]), (0, 0), today)
+        self.assertIsNotNone(pr["update_day"])
+        # work committed on a later day is progress again
+        later = (date.today() + timedelta(days=1)).isoformat() + "T12:00:00+00:00"
+        self.write("projects/alpha/more.md", "---\nl0: more\n---\n\nnext day\n")
+        p = self.mod("content", "commit", "--only", "projects/alpha/more.md", today=TOMORROW,
+                     env={"GIT_COMMITTER_DATE": later})
+        self.assertEqual(p.returncode, 0, p.stdout)
+        pr = self.survey(today=TOMORROW)["projects"][0]["progress"]
+        self.assertEqual((pr["commits_since_project_md"], pr["commits_since_update"], pr["has_progress"]),
+                         (2, 1, True))
+
+    def test_same_day_commits_count_when_project_md_was_not_an_update(self):
+        """Only an ``update apply`` covers its own day: after ``new`` (or a hand edit of
+        PROJECT.md) the same day's commits are progress."""
+        self.commit_content("projects/alpha/context/n1.md")
+        pr = self.survey()["projects"][0]["progress"]
+        self.assertEqual((pr["commits_since_update"], pr["update_day"], pr["has_progress"]), (1, None, True))
 
     def test_registered_rules_in_process(self):
         reg = audit.Registry()

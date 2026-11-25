@@ -51,10 +51,27 @@ JSON keys (`--json`; also `result`, `command`, `messages`):
 | `worktree` | `{branch, clean, to_commit, deletes[], waiting, not_handled[], refused[], plan}`: the dirty paths classified as `content status` does; `plan` is the same object `content status --json` prints (`targets`, `waiting`, `other`, `unlanded`). `clean` counts every dirty path, untracked and unhandled ones too |
 | `content_branches[]` | oldest first, local ∪ remote `content/<YYYY-MM-DD>` (other names ignored): `{date, branch, location: local\|remote\|both, tips_match, commits, landed, past}`. `commits` is the number of commits main lacks; `landed` is true when landing would bring nothing main lacks (generated indexes ignored); `past` is `date < today`; `tips_match` is set only for `both` |
 | `projects[]` | open projects: `projects/INDEX.md` rows on main that are not `completed`/`archived`, plus local `project/*` branches without a row; sorted by name |
-| `projects[].progress` | `{branch, last_project_md_commit, commits_since_project_md, uncommitted, today_worklog, today_worklog_on[], has_progress}`: commits on `project/<name>` since `PROJECT.md` last changed there; working-tree paths that would go to `project/<name>`; where today's work_log exists (`content/<today>`, `main`); `has_progress` is `commits_since_project_md > 0 or uncommitted > 0` |
+| `projects[].progress` | `{branch, last_project_md_commit, commits_since_project_md, update_day, commits_since_update, uncommitted, today_worklog, today_worklog_on[], has_progress}` (below) |
 | `projects[].milestone` | `{ahead, last_landed, last_landed_commit, days_since_landed, substantive, substantive_paths[], recommend, triggers[], reasons[]}` (below) |
 | `findings[]` | health-check findings (below) |
 | `audit` | `{rules: <number of registered rules>}` |
+
+### Progress
+
+- `commits_since_project_md`: commits on `project/<name>` since `PROJECT.md` last changed
+  there (since it left main when it never did).
+- `update_day`: when that last change is an `update apply` commit
+  (`project(<name>): update <date>`), its committer date (`YYYY-MM-DD`); otherwise `null`.
+- `commits_since_update`: `commits_since_project_md` without the commits made on
+  `update_day`. An update covers the day it was made: `/exo:eod` updates `PROJECT.md` first
+  and commits the project's files after, and those files are in that day's work_log, so the
+  closing commit is not progress the next morning. Without an update (`new`, a hand edit of
+  `PROJECT.md`) every commit counts. Dates are committer dates, so a commit made after
+  midnight in the same eod run counts as the next day's.
+- `uncommitted`: working-tree paths that would go to `project/<name>`.
+- `today_worklog_on`: where today's work_log exists (`content/<today>`, `main`).
+- `has_progress`: `commits_since_update > 0 or uncommitted > 0`. `/exo:eod` also skips a
+  project whose `today_worklog_on` is not empty (updated today).
 
 ### Milestone recommendation
 
