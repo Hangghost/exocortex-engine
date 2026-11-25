@@ -104,6 +104,16 @@ class WriteTests(TodoCase):
         self.assertIn(f"push {CREF}: pushed", p.stdout)
         self.assertEqual(self.rev(CREF), self.rev(CREF, self.remote))
 
+    def test_list_json_says_whether_the_file_exists(self):
+        """``exists`` tells "no inbox/todos.md yet" from "a file with nothing open" without
+        reading the human message."""
+        code, data = self.tjson("list")
+        self.assertEqual((code, data["exists"], data["count"], data["ref"]), (0, False, 0, "main"))
+        self.add("one")
+        self.assertEqual(self.tcli("done", "one", "--note", "ok", "--no-push").returncode, 0)
+        code, data = self.tjson("list")
+        self.assertEqual((code, data["exists"], data["count"], data["ref"]), (0, True, 0, CREF))
+
     def test_base_prefers_local_then_tracking_then_main(self):
         self.add("one")
         self.git("push", "-q", "origin", CREF)
@@ -238,7 +248,7 @@ class ListTests(TodoCase):
         self.git("checkout", "-q", "main")
         code, data = self.tjson("list", "--all")
         self.assertEqual(code, 0)
-        self.assertEqual(list(data), ["result", "command", "ref", "count", "warnings", "todos", "messages"])
+        self.assertEqual(list(data), ["result", "command", "ref", "exists", "count", "warnings", "todos", "messages"])
         self.assertEqual((data["ref"], data["count"]), ("main", 3))
         b, hand, a = data["todos"]
         self.assertEqual(b, {"ticket": "b-two", "title": "B", "project": "alpha", "status": "ready", "summary": "sb",

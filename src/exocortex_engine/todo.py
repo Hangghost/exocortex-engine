@@ -188,7 +188,7 @@ def cmd_list(ctx: Ctx, out: Out, a: argparse.Namespace) -> None:
     except todo_md.TodoError as exc:
         raise Refused(str(exc)) from None
     todos = doc.todos(project=a.project, status=a.status, include_done=a.all)
-    out.data.update(ref=base.label, count=len(todos), warnings=doc.warnings, todos=todos)
+    out.data.update(ref=base.label, exists=doc.exists, count=len(todos), warnings=doc.warnings, todos=todos)
     out.say(f"# todos ({base.label}, {len(todos)} item(s)" + ("" if doc.exists else f"; no {todo_md.PATH} yet") + ")")
     for t in todos:
         tag = f"[{t['status']}]" if t["state"] == "open" else f"[{t['state']}]"

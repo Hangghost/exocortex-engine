@@ -97,15 +97,17 @@ Consumers call `list --json` (`--all` for Done) and never parse the file. Shared
 `command`, `messages`) plus:
 
 ```json
-{ "ref": "content/2026-11-24", "count": 1, "warnings": [],
+{ "ref": "content/2026-11-24", "exists": true, "count": 1, "warnings": [],
   "todos": [ { "ticket": "slug-a", "title": "Title", "project": "name-or-null", "status": "ready",
                "summary": "", "added": "2026-11-20", "due": null, "state": "open",
                "raw": "- [ ] [ready][ticket:slug-a][added:2026-11-20] **Title**\n  - sub-item" } ] }
 ```
 
 `state` is `open`, `done` or `dropped` (status is `null` for the last two); `ref` is the ref
-actually read; `raw` is the entry's text, sub-items included, LF, no trailing newline; `due` is an
-ISO date or `null` (an unreadable one is `null` plus a warning). An entry without a ticket is listed
+actually read; `exists` is whether `inbox/todos.md` is there at all on that ref (`false` with
+`count: 0` is "no file yet", not "nothing to do"); `raw` is the entry's text, sub-items
+included, LF, no trailing newline; `due` is an ISO date or `null` (an unreadable one is `null`
+plus a warning). An entry without a ticket is listed
 with `ticket: null` and a warning naming its line. Order is file order. In Python,
 `todo_md.parse(text) -> Doc` and `todo_md.read(git, ref) -> Doc` (`Doc.todos(...)`, `Doc.warnings`)
 are for other modules of this package.

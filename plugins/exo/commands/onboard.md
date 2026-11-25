@@ -46,7 +46,7 @@ argument-hint: "[--unattended]"
 跑 `RUN todo list --json`（只列 Active）。
 
 - 跑不起來（stdout 沒有 `result:` 第一行，例如 stderr 為 `No module named exocortex_engine.todo`）：整段換成一行「待辦：todo 未安裝（<錯誤首行>）」。
-- `messages` 第一行含 `no inbox/todos.md yet`：整段換成一行「待辦：尚未建立 `inbox/todos.md`（`/exo:todo add` 會建立）」。
+- `exists == false`：整段換成一行「待辦：尚未建立 `inbox/todos.md`（`/exo:todo add` 會建立）」。
 - 被拒（`result: rejected`）：整段換成一行「待辦：讀取失敗（<`refused:` 行>）」。
 - 以上三種都**不得**省略成「沒有待辦」。檔案存在且 `count == 0` 時整段省略。
 - 否則：「待辦 <count> 項，逾期或今天到期 <N> 項」，N 是 `todos[]` 中 `state == "open"`、`due` 不是 `null` 且 `due <= survey 的 today` 的條數；再列前 3 條（逾期／到期者在前，其餘照檔案順序），每條「`<ticket>` <title>（due <due>）」。`warnings` 非空時附一行「另有 <數> 則格式警告，`/exo:todo list` 查看」。
