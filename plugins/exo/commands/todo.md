@@ -5,7 +5,7 @@ argument-hint: "add <描述> | list [--project <name>] [--all] | set <ticket> �
 
 # /exo:todo
 
-需要的引擎版本：`0.4.1`
+需要的引擎版本：`0.5.0`
 
 引數：`$ARGUMENTS`
 

@@ -10,7 +10,7 @@
     {
       "name": "exo",
       "source": "./plugins/exo",
-      "description": "Exocortex workspace commands: /exo:project (new, load, update, board, land), /exo:content (status, commit, land), /exo:discuss (discussion partner), /exo:decision-ui (offline batch decisions) and /exo:doc-formatter (format content into workspace documents).",
+      "description": "Exocortex workspace commands: /exo:project (new, load, update, board, land), /exo:content (status, commit, land), /exo:roadmap (project structure: synthesize, revise, diff), /exo:todo (inbox/todos.md: add, list, set, done), /exo:next (one project's open items in waves), /exo:onboard (morning digest), /exo:eod (end of day), /exo:discuss (discussion partner), /exo:decision-ui (offline batch decisions) and /exo:doc-formatter (format content into workspace documents); a SessionStart hook warns when the workspace's persona plugin is missing.",
       "license": "Apache-2.0"
     }
   ]

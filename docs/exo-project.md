@@ -109,6 +109,11 @@ The first output line is machine-readable: `result: ok|noop|rejected|error|usage
   sub-sections, no `## ` heading) **before** writing anything; then it writes `PROJECT.md`
   plus the INDEX `last_updated` to `project/<name>` and the work_log to `content/<today>` in
   one transaction. `last_updated` is set to today by the CLI.
+- The command's `load` also lists the project's todos (`todo list --project <name> --json`,
+  read-only), and `update`, after `apply` succeeds, offers the todos that look done and the
+  `needs-triage` ones in one question; only entries the user ticks are marked done
+  ([exo-todo.md](exo-todo.md)). An entry without a ticket is listed, never written. A todo
+  failure never undoes or blocks the progress write.
 - `board` reads `main`'s INDEX and, for every project that is not `completed` or `archived`,
   the `PROJECT.md` on its branch: status, days since `last_updated`, and the first actionable
   line of `## 下一步` (skipping sub-headings, blockquotes, comments, placeholders, label lines
@@ -132,7 +137,7 @@ The workspace may pin the contract in `.exocortex/instance.toml` with a top-leve
    ```toml
    [project]
    dependencies = [
-     "exocortex-engine @ git+https://github.com/Hangghost/exocortex-engine@v0.4.1",
+     "exocortex-engine @ git+https://github.com/Hangghost/exocortex-engine@v0.5.0",
    ]
    ```
 
@@ -146,7 +151,14 @@ The workspace may pin the contract in `.exocortex/instance.toml` with a top-leve
    [executor]
    python = "./.venv/Scripts/python.exe"   # Windows; macOS/Linux: "./.venv/bin/python"
    env = { PYTHONUTF8 = "1" }
+
+   # [persona]                              # optional, see exo-persona.md
+   # plugin = "<name>@<marketplace>"
    ```
+
+   The optional `[persona]` table names the persona plugin the workspace expects; the
+   plugin's SessionStart hook warns when this Claude Code configuration lacks it
+   ([exo-persona.md](exo-persona.md)). Without the table the hook does nothing.
 
 3. The Claude Code plugin, recorded in the workspace's `.claude/settings.json`:
 
@@ -155,7 +167,12 @@ The workspace may pin the contract in `.exocortex/instance.toml` with a top-leve
    claude plugin install exo@exocortex-engine --scope project
    ```
 
-   The commands are `/exo:project`, `/exo:content`, `/exo:discuss`, `/exo:decision-ui` and `/exo:doc-formatter`. To update later:
+   The commands are `/exo:project`, `/exo:content`, `/exo:roadmap` ([exo-roadmap.md](exo-roadmap.md)),
+   `/exo:todo` ([exo-todo.md](exo-todo.md)), `/exo:next` ([exo-next.md](exo-next.md)),
+   `/exo:onboard` and `/exo:eod` ([exo-onboard-eod.md](exo-onboard-eod.md), with
+   [exo-day.md](exo-day.md)), `/exo:discuss`, `/exo:decision-ui` and `/exo:doc-formatter`.
+   The plugin also registers a SessionStart hook that checks the persona plugin
+   ([exo-persona.md](exo-persona.md)); it runs on `node`. To update later:
    `claude plugin marketplace update exocortex-engine` then
    `claude plugin update exo@exocortex-engine`.
 

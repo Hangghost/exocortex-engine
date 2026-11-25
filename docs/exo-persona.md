@@ -54,7 +54,9 @@ It then reads `<config dir>/plugins/installed_plugins.json` (must be `version: 2
 
 `unknown` warns on purpose: a detector that cannot tell must not look like "all fine".
 `present` means "installed and enabled", not "loaded": a persona hook that fails on its own is
-not detected here (it prints its own failure message).
+not detected here (it prints its own failure message). "Installed" is any non-empty entry for
+the id; the entry's `scope` is not checked, so a project-scope install made for another
+project also counts as installed here.
 
 ## Output
 

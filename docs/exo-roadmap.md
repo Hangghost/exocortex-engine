@@ -20,7 +20,7 @@ revised: 2026-11-24
 revised_by: what was read (free text)
 since: 2026-11-24        # diff base date
 now: [task-id, ...]      # ordered, all tasks, no repeats
-phases:  [{id, title, state: done|now|later, done_when?, gate?: {id, condition, evaluated: null|date, note?}}]
+phases:  [{id, title, state: done|now|later, done_when?, gate?: {id, condition, evaluated?: null|date, note?}}]
 lines:   [{id, title, clearer}]
 tasks:   [{id, title, line, phase, status: open|done|cancelled, after?: [id], clears?: [id], due?: date, why_here?, done_note?}]
 ledger:  [{id, title, line, why?, cleared_by?: id}]               # optional
@@ -28,10 +28,14 @@ decisions: [{id, text, superseded_by?: id, superseded_note?}]     # optional, no
 signals: [{id, date, text, informs?: [id]}]                       # optional, no status
 ```
 
-Ids are kebab-case and unique across the whole file (a gate's id included). Fields not listed
-are ignored. The file is read with `yaml_subset` (block mappings and sequences, plain, quoted
+Ids are kebab-case and unique across the whole file (a gate's id included). A gate needs
+`id` and `condition`; a missing `evaluated` counts as `null`. `cleared_by` and
+`superseded_by` may name any id in the file (a decision superseded by a later decision, not
+only a task); `now` and `after` name tasks only. Fields not listed
+are ignored. A leading BOM is dropped, so a file saved by a Windows editor reads the same in
+`validate` and in `content commit`. The file is read with `yaml_subset` (block mappings and sequences, plain, quoted
 and block scalars, one-line flow sequences); anything else is a `parse-failed` finding with its
-line, never a guess. In particular a folded scalar (`>`) whose lines are not all indented the
+line (inside a folded block, the first line indented deeper than the rest), never a guess. In particular a folded scalar (`>`) whose lines are not all indented the
 same is refused: write such text as separate fields or a plain string.
 
 ## Validation
@@ -69,7 +73,9 @@ decisions and signals: `added` and `removed` (`{id, kind, title}`), `moved` (a t
 `phase`, or a ledger entry's `line`, changed: `{id, kind, title, from, to}`), `changed` (any
 other field: `{id, kind}`), `now` (`{before, after, changed}`) and `empty`. Values are compared
 as loaded, so re-quoting is not a change; `revised`, `revised_by` and `since` are not compared.
-A renamed id is one `removed` plus one `added`, never silent.
+A renamed id is one `removed` plus one `added`, never silent. A revision that changes only
+`revised` or `revised_by` is therefore `noop`, and `/exo:roadmap revise` lands it without a
+question.
 
 ## CLI
 
@@ -96,7 +102,8 @@ neither sub-command writes anything.
 
 ## Python entry points
 
-For other modules (`/exo:next` reads the roadmap through these, never through YAML of its own):
+For other modules ([`/exo:next`](exo-next.md) reads the roadmap through these, never through
+YAML of its own):
 
 - `read_roadmap(git, name, rev=None) -> Loaded`: the file at `rev` (default `project/<name>`).
   `Loaded` has `status` (`ok`, `absent`, or `failed` when it does not parse or has findings),

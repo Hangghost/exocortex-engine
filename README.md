@@ -16,6 +16,40 @@ switching branches, recomputes the `contexts/<folder>/INDEX.md` navigation index
 branch, and lands it on `main` while the committed files stay in your working tree:
 [docs/exo-content.md](docs/exo-content.md).
 
+## `/exo:roadmap`
+
+A project's structure as one checked file, `projects/<name>/ROADMAP.yaml` on its project
+branch: `synthesize` drafts it, `revise` rewrites it from fresh material and shows what
+changed, `diff` compares without writing. `/exo:content commit` refuses a ROADMAP that fails
+the validator: [docs/exo-roadmap.md](docs/exo-roadmap.md).
+
+## `/exo:todo`
+
+Todos in one file, `inbox/todos.md`, one line per entry (`add`, `list`, `set`, `done`, and a
+`triage` mode), written to `content/<today>` without switching branches; `list --json` is
+what the other commands read: [docs/exo-todo.md](docs/exo-todo.md).
+
+## `/exo:next`
+
+One project's open items (ROADMAP tasks, `## 下一步` of `PROJECT.md`, the project's todos)
+as one read-only inventory, merged and counted, and at most three waves to move them:
+[docs/exo-next.md](docs/exo-next.md).
+
+## `/exo:onboard`
+
+The start of the day: a one-page digest (state of `main` and the working tree, unlanded past
+days, health findings, board, todos, open items, suggested next steps), read-only unless you
+agree to a commit or a fast-forward. The deterministic half is `python -m exocortex_engine.day`
+([docs/exo-day.md](docs/exo-day.md)); the flow is in
+[docs/exo-onboard-eod.md](docs/exo-onboard-eod.md).
+
+## `/exo:eod`
+
+The end of the day: land past dates, update the projects that moved, commit the working tree,
+offer milestones, land today and push, then a report. It only orchestrates the existing
+primitives and never forces; unattended runs need `--allow commit,land,push` and still never
+write a work_log or pick a milestone: [docs/exo-onboard-eod.md](docs/exo-onboard-eod.md).
+
 ## `/exo:discuss`
 
 A discussion partner: a decision tree asked one full round at a time, each question with a
@@ -40,10 +74,21 @@ name under `contexts/<folder>/`; after you confirm the preview it commits throug
 `/exo:content`:
 [plugins/exo/skills/doc-formatter/SKILL.md](plugins/exo/skills/doc-formatter/SKILL.md).
 
+## Persona check
+
+The plugin's SessionStart hook warns when the workspace declares a persona plugin in
+`.exocortex/instance.toml` that this Claude Code configuration does not have installed, has
+disabled, or cannot be checked: [docs/exo-persona.md](docs/exo-persona.md). The plugin-side hook runs on `node`; the
+Python package still uses only the standard library.
+
+## Install
+
 ```sh
 claude plugin marketplace add Hangghost/exocortex-engine
 claude plugin install exo@exocortex-engine --scope project
 ```
+
+Setting up a workspace (Python dependency, executor, versions): [docs/exo-project.md](docs/exo-project.md#installing-in-a-workspace).
 
 ## Private identifier gate
 

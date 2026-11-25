@@ -11,7 +11,7 @@ argument-hint: "[<議題一句話>] [--redteam] [--resume <紀錄路徑或 slug>
 
 # /exo:discuss：討論夥伴
 
-需要的引擎版本：`0.4.1`
+需要的引擎版本：`0.5.0`
 
 引數：`$ARGUMENTS`
 

@@ -26,8 +26,9 @@ The first `add` creates the skeleton when the file is missing.
   - 完成：2026-11-24 note
 ```
 
-- **Entry**: a line starting `- [ ]` (Active) or `- [x]` (Done). The run of `[...]` right after it
-  is the tags, the first `**...**` the title, the text after the next ` — ` the summary. Indented
+- **Entry**: a line starting `- [ ]` (Active) or `- [x]` (Done). The run of `[...]` right after it,
+  with no space between them, is the tags (in `[ready] [WIP]` only the first is a tag, and a
+  `[...]` followed by `(` is a link, not a tag), the first `**...**` the title, the text after the next ` — ` the summary. Indented
   and blank lines belong to the entry up to the next line starting `- ` or a heading. Lines inside an
   HTML comment are skipped. Active ends at the next `## ` heading.
 - **Tags**: `[<status>]`, `[project:<name>]`, `[ticket:<slug>]`, `[added:YYYY-MM-DD]`,
@@ -41,7 +42,8 @@ The first `add` creates the skeleton when the file is missing.
 - **project**: optional; when given it must be a row `name` of `projects/INDEX.md` on `main` (any
   status). Entries without one report `project: null`.
 - **due**: optional `YYYY-MM-DD`. Only data is provided; overdue or stale reminders are not rendered.
-- **Done**: `### YYYY-MM-DD` batches, newest on top, same day reused. Moving an entry turns `[ ]` into
+- **Done**: `### YYYY-MM-DD` batches, newest on top, same day reused; within a batch the entry
+  moved last is on top. Moving an entry turns `[ ]` into
   `[x]`, drops the status, adds `完成：<date> <note>` (or `[dropped]` and `放棄：<date> <reason>`).
 - `### ` headings inside Active stay where they are; new entries go to the end of Active. A file
   without `## Active` or `## Done` is refused for every sub-command and the heading is named.
@@ -63,10 +65,13 @@ codes (0 / 1 / 2) are those of `exocortex_engine.project`. Multi-line text goes 
 only (quoting and stdin are unreliable on native Windows); the CLI indents each line two spaces.
 
 - `add`: `--status` defaults to `needs-triage`, `added` is today. An existing ticket (Done included)
-  is refused naming its title, never renamed. The same call again is `noop`.
+  is refused naming its title, never renamed. The same call again is `noop` (compared on the
+  entry's title line; sub-items are not compared).
 - `list`: read only; Active by default, `--all` adds Done. `--project` and `--status` are AND filters.
 - `set`: at least one option. `--note` appends `  - <date> 備註：<text>`. A Done ticket or an unknown
-  one is refused.
+  one is refused. There is no syntax to clear `due` or `project`.
+- A ticket that a hand edit left on more than one line is refused by `set` and `done`, naming
+  the lines.
 - `done`: Active → Done. `--dropped` needs a non-empty `--note`. A ticket already in Done is `noop`.
 - Bad arguments (slug, empty title or `**`, status, date, missing reason or ticket) exit `2`;
   state problems (unknown or duplicate ticket, project not in the index, guards below) exit `1`.
@@ -90,6 +95,10 @@ Guards, all before anything is written:
 - **Hand edits**: the checkout's copy must equal its `HEAD` version or the base's version. Otherwise
   the write is refused: run `/exo:content commit --only inbox/todos.md` (it passes only while
   `/exo:todo` has not written today), or discard the edits.
+
+Once `/exo:todo` has written on a day, change `inbox/todos.md` only through `/exo:todo` until that
+day lands: the checkout's copy is older than `content/<today>` from then on, so a hand edit can no
+longer be committed. To edit by hand, `land content` first (or discard the hand edit).
 
 ## `list --json`
 

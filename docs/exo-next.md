@@ -7,8 +7,8 @@ nothing is written, no git write runs, no outside tracker is read. Same package 
 The work is split in two. `python -m exocortex_engine.next_items` does what can be decided
 deterministically: it reads the sources through git refs, groups, merges, counts and checks the
 ledger. The command's prose ([`plugins/exo/commands/next.md`](../plugins/exo/commands/next.md))
-only reads that JSON: it judges each item's label, orders the waves and asks the one question,
-"採用第 1 波？". The module is named `next_items` so that it does not shadow the builtin `next`.
+only reads that JSON: it judges each item's label (a next step or todo whose text gives no
+clue is ✋, done by hand), orders the waves and asks the one question, "採用第 1 波？". The module is named `next_items` so that it does not shadow the builtin `next`.
 
 ## CLI
 
@@ -65,7 +65,7 @@ next step; a repeated key gets `~2`, `~3`.
 
 | Source | Read from | `absent` | `failed` |
 |---|---|---|---|
-| `roadmap` | `projects/<name>/ROADMAP.yaml` on `project/<name>` via `roadmap.read_roadmap`; open tasks only | no branch or no file | it does not parse or has any validator finding (`note` names the first three, `findings` has all) |
+| `roadmap` | `projects/<name>/ROADMAP.yaml` on `project/<name>` via `roadmap.read_roadmap` ([exo-roadmap.md](exo-roadmap.md)); open tasks only | no branch or no file | it does not parse or has any validator finding (`note` names the first three, `findings` has all) |
 | `next_step` | `## 下一步` of `PROJECT.md` on `project/<name>`, else main | no PROJECT.md, or no such section | not UTF-8 |
 | `todo` | `inbox/todos.md` at the base `/exo:todo` reads (`content/<today>`, else `origin/content/<today>`, else main); open entries with `[project:<name>]` | no such file | it does not parse |
 
@@ -79,7 +79,8 @@ column-0 `<details>` block, fenced code or multi-line comment are left out.
 ## Groups and merges
 
 With a ROADMAP: one group per phase whose state is not `done`, in ROADMAP order, titled with the
-phase title; then `待辦（未排入規劃）` and `下一步（未排入 ROADMAP）`. Without one: `下一步`, then `待辦`.
+phase title; then `待辦（未排入規劃）` and `下一步（未排入 ROADMAP）`. Without one: `下一步`, then `待辦`; `###` sub-headings in `## 下一步` do not split the group (an item
+keeps its sub-heading in `heading`, for information only).
 A `done` phase that still has open tasks keeps its group, so those tasks stay visible.
 
 A todo whose ticket equals an open task's id, and a next step whose text contains an open task's

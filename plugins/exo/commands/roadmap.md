@@ -5,7 +5,7 @@ argument-hint: "<name> synthesize | <name> revise | <name> diff"
 
 # /exo:roadmap
 
-需要的引擎版本：`0.4.1`
+需要的引擎版本：`0.5.0`
 
 引數：`$ARGUMENTS`
 

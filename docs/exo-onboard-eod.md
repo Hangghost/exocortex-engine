@@ -31,7 +31,7 @@ A decision with a default is never taken silently when nobody can answer:
 | eod 2, 7: land past dates, land today | after confirmation | **stop** (`land`) | done; stop on a refusal |
 | eod 3: project updates | asked, then applied | skipped, reported | **still skipped** |
 | eod 4: lesson | asked | not asked, nothing written | same |
-| eod 5: commit the working tree | after confirmation | **stop** (`commit`) | stop on any `DELETE` or refusal; else `content: <date> eod (unattended)` |
+| eod 5: commit the working tree | after confirmation | **stop** (`commit`) | stop on any `DELETE` or refusal; else `content: <date> eod (unattended)`, and `project(<name>): eod (unattended)` for each project branch |
 | eod 6: milestones | asked, then landed | skipped, reported | **still skipped** |
 | eod 8: push | done | **stop** (`push`) | done; divergence left for the user |
 
@@ -97,7 +97,7 @@ A decision with a default is never taken silently when nobody can answer:
 | 1 | state | `day survey --fetch --json` | `rejected`: stop; main `behind` or `diverged`: stop before any write |
 | 2 | land past dates | `project land content <date>`, oldest first | one confirmation for all dates; remote-only dates are left for the user |
 | 3 | project updates | `project update <name> gather` / `apply` for projects with `progress.has_progress` and an empty `progress.today_worklog_on` | one round of questions for all projects; one failure does not stop the others; a project with today's work_log counts as updated, so a second run the same day does not ask again |
-| 4 | lesson | asked in the same round as step 3 | into an updated project's `### 經驗與觀察`, else `contexts/thought_review/<date>_eod_lessons.md` (committed in step 5); blank: no-op |
+| 4 | lesson | asked in the same round as step 3 | into an updated project's `### 經驗與觀察` (same `apply`), else `contexts/thought_review/<date>_eod_lessons.md` (frontmatter `date`, `type: lessons`, `l0`, and `project` when attributed; a later run the same day appends `## <HH:MM>`; committed in step 5); blank: no-op |
 | 5 | commit the working tree | `content status --json`, `content commit` | `DELETE` lines flagged; `rejected`: stop |
 | 6 | milestones | `projects[].milestone` with `ahead > 0`; `project land project <name> "<milestone>"` | one multi-select; `recommend` and `reasons[]` shown as given |
 | 7 | land today | `project land content` | after step 6, so main moves to its final shape once |

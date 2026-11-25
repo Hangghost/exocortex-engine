@@ -5,7 +5,7 @@ argument-hint: "[status] | commit [<描述>] | land [<date>]"
 
 # /exo:content
 
-需要的引擎版本：`0.4.1`
+需要的引擎版本：`0.5.0`
 
 引數：`$ARGUMENTS`
 
