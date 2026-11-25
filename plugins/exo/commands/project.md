@@ -46,6 +46,10 @@ argument-hint: "new <name> | load <name> | update <name> | board | land content 
 1. 跑 `EXO load <name>`。
 2. 依輸出摘要目標、現況、下一步，列出最近的 work_log 路徑；有 `hint:` 行時一併轉告（工作樹裡的 PROJECT.md 落後分支，以分支為準）。
 3. 需要更多脈絡時，用 `git show <ref>:<path>` 讀輸出列出的檔案（**讀 ref，不讀工作樹副本**）。
+4. 列出本專案待辦（唯讀）：跑 `TODO list --project <name> --json`。`TODO` 與 `EXO` 用同一個執行器與 `env`，模組換成 `exocortex_engine.todo`。
+   - `count` 為 0（含還沒有 `inbox/todos.md`）：只說一句「本專案無待辦」。
+   - 有條目：逐條列出 `ticket`、`status`、`title`、`due`；有 `needs-triage` 時提示可在 `update` 或用 `/exo:todo triage <name>` 分診。`warnings` 原樣轉告。
+   - `result` 不是 `ok`／`noop`，或指令跑不起來：轉告 `messages` 裡的 `refused:`／`conflict:`／`error:` 那行（沒有就附錯誤首行），**不中止本子命令**（§0 第 3 步的「停下」不適用於 `TODO`）。
 
 ## update `<name>`
 
@@ -78,6 +82,12 @@ argument-hint: "new <name> | load <name> | update <name> | board | land content 
    `EXO update <name> apply --project-md <PROJECT.md 暫存檔> --worklog-section <區段暫存檔> --worklog-l0 "<今天這個專案的一行總結>"`
 6. 被拒時（例如缺段落、frontmatter 不合格），依錯誤訊息修正暫存檔後重跑 `apply`；兩項寫入是整批的，被拒代表都沒寫。
 7. 回報寫入的分支與 commit、push 結果，並刪除暫存檔。
+8. 消化本專案待辦（`apply` 成功後才做）：照 `## load` 第 4 步跑 `TODO list`，無待辦與失敗的處理相同；`TODO` 失敗不影響已寫入的進度。有條目時：
+   - 拿本次的進展補充與對話，和各條目（含 `raw` 裡的子項）做語意比對，挑出疑似已完成者並附依據。
+   - `needs-triage` 的條目比照 `/exo:todo triage <name>`：先做唯讀查證（讀相關檔案、`git log`），每條附結論與建議。
+   - **一次問完**：疑似完成者請使用者勾選；`needs-triage` 的選「登記為 `ready`／`discuss-first`／`needs-analysis`＋查證備註」、「放棄＋理由」或「暫緩」。同一條只列一次；兩類都沒有就不問。
+   - 依答案逐條寫回：**只有使用者勾選完成的**才跑 `TODO done <ticket> --note "<依據>"`，**不得自動 `done`**；分診結果跑 `TODO set <ticket> --status <s> --note "<查證備註>"` 或 `TODO done <ticket> --dropped --note "<理由>"`（備註與理由單行、不得為空）。沒勾選完成、也沒給分診結果的條目不動。
+   - `ticket` 為 `null` 的條目只列出、不寫。
 
 ## board
 
