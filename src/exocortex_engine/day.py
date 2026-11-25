@@ -26,7 +26,7 @@ import sys
 from datetime import date
 from typing import Any, Optional, Sequence
 
-from . import audit, index_md, project_md, worklog
+from . import audit, index_md, project_md, roadmap, worklog
 from .audit import Finding, Subject, Suggest
 from .content import _plan_data, _toplevel, make_plan
 from .generated_files import is_contexts_index_path
@@ -253,8 +253,10 @@ def _milestone(ctx: Ctx, name: str) -> dict[str, Any]:
     days = _days(ctx, landed_day) if landed_day else None
     base = ctx.git.merge_base(main_tip, tip)
     scope, notes = f"projects/{name}/", f"projects/{name}/context/"
+    # progress snapshots: rewritten by updates and revisions, not material of their own
+    snapshots = {project_md.project_path(name), roadmap.roadmap_path(name)}
     changed = ctx.git.changed_paths(base, tip, [scope]) if base and ahead else []
-    material = [p for p in changed if not p.startswith(notes)]
+    material = [p for p in changed if not p.startswith(notes) and p not in snapshots]
     triggers: list[dict[str, Any]] = []
     if ahead:
         if ahead >= AHEAD_MIN:
@@ -270,7 +272,7 @@ def _milestone(ctx: Ctx, name: str) -> dict[str, Any]:
         if t["rule"] == "ahead":
             reasons.append(f"{ahead} commit(s) ahead of {short_ref(ctx.main)} (>= {AHEAD_MIN})")
         elif t["rule"] == "substantive":
-            reasons.append(f"{len(material)} changed path(s) outside {notes}")
+            reasons.append(f"{len(material)} changed path(s) outside {notes}, PROJECT.md and ROADMAP.yaml")
         elif t["rule"] == "never-landed":
             reasons.append("never landed")
         else:

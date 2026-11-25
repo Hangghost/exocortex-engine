@@ -82,7 +82,7 @@ lacks), `recommend` is true when **any** of these holds; each one that holds is 
 | `rule` | Condition |
 |---|---|
 | `ahead` | `ahead >= 5` |
-| `substantive` | the branch changed a path under `projects/<name>/` outside `projects/<name>/context/` since it left main |
+| `substantive` | the branch changed a path under `projects/<name>/` since it left main, other than `projects/<name>/context/**` (notes) and the progress snapshots `PROJECT.md` and `ROADMAP.yaml` (every update and revision rewrites them) |
 | `never-landed` | main has no `Merge project/<name>: <milestone>` commit (the `new` merge does not count) |
 | `days-since-landed` | at least 7 days since the latest such merge (its committer date) |
 

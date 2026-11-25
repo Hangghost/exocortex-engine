@@ -232,6 +232,29 @@ class SurveyTests(DayCase):
         self.assertEqual((pr["commits_since_project_md"], pr["commits_since_update"], pr["has_progress"]),
                          (2, 1, True))
 
+    def test_progress_snapshots_are_not_substantive(self):
+        """``PROJECT.md`` (rewritten by every update) and ``ROADMAP.yaml`` are progress
+        snapshots, not material: alone they do not make a milestone ``substantive``."""
+        md = (
+            "---\nlast_updated: 2026-01-02\nstatus: active\nl0: alpha after update\n---\n\n# Alpha\n\n"
+            "## 目標 / 動機\n\ngoal\n\n## 現況\n\nnow better\n\n## 下一步\n\n- next\n"
+        )
+        p = self.mod("project", "update", "alpha", "apply", "--project-md", self.tmpfile("p.md", md),
+                     "--worklog-section", self.tmpfile("s.md", SECTION))
+        self.assertEqual(p.returncode, 0, p.stdout)
+        self.git("switch", "-q", "project/alpha")
+        self.write("projects/alpha/ROADMAP.yaml", "project: alpha\n")
+        self.git("add", "projects/alpha/ROADMAP.yaml")
+        self.git("commit", "-q", "-m", "roadmap")
+        self.git("switch", "-q", "main")
+        ms = self.survey()["projects"][0]["milestone"]
+        self.assertEqual(ms["ahead"], 2)
+        self.assertEqual((ms["substantive"], ms["substantive_paths"]), (False, []))
+        self.assertEqual([t["rule"] for t in ms["triggers"]], ["never-landed"])
+        self.commit_content("projects/alpha/report.md")
+        ms = self.survey()["projects"][0]["milestone"]
+        self.assertEqual((ms["substantive"], ms["substantive_paths"]), (True, ["projects/alpha/report.md"]))
+
     def test_same_day_commits_count_when_project_md_was_not_an_update(self):
         """Only an ``update apply`` covers its own day: after ``new`` (or a hand edit of
         PROJECT.md) the same day's commits are progress."""
