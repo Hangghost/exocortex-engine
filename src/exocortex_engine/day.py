@@ -28,7 +28,7 @@ from typing import Any, Optional, Sequence
 
 from . import audit, index_md, project_md, roadmap, worklog
 from .audit import Finding, Subject, Suggest
-from .content import _plan_data, _toplevel, make_plan
+from .content import make_plan, plan_data, toplevel
 from .generated_files import is_contexts_index_path
 from .gitref import Refused, three_way_changes, short_ref
 from .project import (
@@ -111,10 +111,10 @@ def _main(ctx: Ctx) -> dict[str, Any]:
 
 def _worktree(ctx: Ctx) -> tuple[dict[str, Any], dict[str, int]]:
     """Dirty summary, classified as ``content status`` does; plus uncommitted paths per project."""
-    top = _toplevel(ctx)
+    top = toplevel(ctx)
     head = _head_branch(top)
     plan = make_plan(top, (), write=False)
-    data = _plan_data(plan)
+    data = plan_data(plan)
     deletes = [p for t in data["targets"] for p in t["deletes"]]
     to_commit = sum(len(t["writes"]) + len(t["deletes"]) for t in data["targets"])
     per_project: dict[str, int] = {}
@@ -350,7 +350,7 @@ def cmd_survey(ctx: Ctx, out: Out, a: argparse.Namespace) -> None:
 
 
 def cmd_sync(ctx: Ctx, out: Out, a: argparse.Namespace) -> None:
-    top = _toplevel(ctx)
+    top = toplevel(ctx)
     local, remote = ctx.git.rev(ctx.main), ctx.git.rev(_tracking(ctx, ctx.main))
     rel = _relation(ctx, local, remote)
     out.data.update(branch=short_ref(ctx.main), before=local, remote=remote, state=rel["state"])

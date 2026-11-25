@@ -478,7 +478,8 @@ def _say_plan(out: Out, plan: Plan, ctx: Ctx) -> None:
             out.say(f"- {b} ({n} commit(s))")
 
 
-def _plan_data(plan: Plan) -> dict:
+def plan_data(plan: Plan) -> dict:
+    """The plan as ``content status --json`` prints it (also read by ``day survey``)."""
     return {
         "targets": [
             {
@@ -493,15 +494,16 @@ def _plan_data(plan: Plan) -> dict:
     }
 
 
-def _toplevel(ctx: Ctx) -> Ctx:
+def toplevel(ctx: Ctx) -> Ctx:
+    """``ctx`` re-rooted at the working tree's top level (``--repo`` may be a sub-directory)."""
     top = Path(ctx.git.run("rev-parse", "--show-toplevel").strip())
     return Ctx(git=Git(top, remote=ctx.git.remote), main=ctx.main, today=ctx.today, now=ctx.now, push=ctx.push)
 
 
 def cmd_status(ctx: Ctx, out: Out, a: argparse.Namespace) -> None:
-    ctx = _toplevel(ctx)
+    ctx = toplevel(ctx)
     plan = make_plan(ctx, a.only or (), write=False)
-    out.data.update(_plan_data(plan))
+    out.data.update(plan_data(plan))
     todo = sum(len(t.writes) + len(t.deletes) for t in plan.targets)
     if not todo:
         out.result = "noop"
@@ -513,9 +515,9 @@ def cmd_status(ctx: Ctx, out: Out, a: argparse.Namespace) -> None:
 
 
 def cmd_commit(ctx: Ctx, out: Out, a: argparse.Namespace) -> None:
-    ctx = _toplevel(ctx)
+    ctx = toplevel(ctx)
     plan = make_plan(ctx, a.only or (), write=True)
-    out.data.update(_plan_data(plan))
+    out.data.update(plan_data(plan))
     if plan.rejects:
         _say_plan(out, plan, ctx)
         raise Refused("nothing was written; " + "; ".join(plan.rejects))
