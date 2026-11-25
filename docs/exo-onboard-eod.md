@@ -57,7 +57,7 @@ A decision with a default is never taken silently when nobody can answer:
 | 2 | unlanded past days | `content_branches[]` with `past` and not `landed`, oldest first | — |
 | 3 | working tree and main | `worktree`, `main` | questions only when attended (step 9) |
 | 4 | board | `project board` | the section shows the error's first line |
-| 5 | todos | `todo list --json`: `count`; open entries with `due <= today`; first 3 | module missing, no `inbox/todos.md`, or refused: one line, never "no todos" |
+| 5 | todos | `todo list --json`: `exists`, `count`; open entries with `due <= today`; first 3 | module missing, refused, or `exists == false`: one line, never "no todos" |
 | 6 | open items | `next_items show <name> --json` for each survey project: `count`, `any_failed`, `sources` | module missing: one line; a failing project: one line |
 | 7 | health | `findings[]`, `audit.rules` | `rules == 0`: "no rules registered" |
 | 8 | digest | — | over 40 lines: first 3 items per section plus "N more" |
@@ -70,6 +70,14 @@ A decision with a default is never taken silently when nobody can answer:
 - **Open items**: one line per project with `count > 0` or `any_failed`:
   "`<name>`: N open, `/exo:next <name>` to expand", plus "(some sources failed)" when
   `any_failed`. A smaller number is never shown in place of a failure.
+- **Module missing or a refusal**: with `--json` the output is one JSON object (its first line
+  is `{`). When stdout parses as JSON with a `result` key the module ran: a non-zero exit is a
+  refusal for that call (`rejected`, exit 1: unknown project; `usage-error`, exit 2: a name
+  that is not kebab-case), shown as one line, and the other projects go on. When it does not
+  parse (empty stdout, `No module named …` on stderr) the module is missing: one line for the
+  whole section. Both can exit 1, so the exit code alone does not tell them apart. The todos
+  section works the same way and tells "no `inbox/todos.md` yet" from "nothing open" by
+  `exists`.
 - **Findings**: a finding whose `subject` is already shown (an unlanded past branch) is not
   repeated. A `suggest` is printed; one with `mutates: true` is marked as a write and is
   **never run**. Whether rules exist is read from `audit.rules`, not from an empty

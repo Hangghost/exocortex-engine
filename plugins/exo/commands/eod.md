@@ -17,7 +17,7 @@ argument-hint: "[--unattended] [--allow commit,land,push]"
 1. **取得執行器**：讀工作區根目錄（`git rev-parse --show-toplevel`）的 `.exocortex/instance.toml` 的 `[executor]`（同 `/exo:project`）。檔案不存在或沒有 `[executor].python`：**停下**，請使用者建立，不要猜路徑。
    - 以下 `RUN <模組>` 代表：在工作區根目錄執行，先設好 `env` 的每個環境變數，再跑 `<python> -m exocortex_engine.<模組>`。例：`PYTHONUTF8=1 ./.venv/Scripts/python.exe -m exocortex_engine.day push --json`。
 2. **版本檢查**：跑 `RUN day version`，第一行 `version: <x.y.z>` 必須與本檔開頭「需要的引擎版本」**完全相等**。不相等或跑不起來：**停下**，印出兩邊版本與兩組更新指令（套件：把工作區 `pyproject.toml` 的引擎依賴 tag 改成 `v<本檔版本>` 後 `uv sync --active`；plugin：`claude plugin marketplace update exocortex-engine` 再 `claude plugin update exo@exocortex-engine`）。
-3. **讀輸出**：第一行 `result: ok|noop|skipped|rejected|error|usage-error`；退出碼 0 成功、1 被拒（**零寫入**）、2 用法錯誤。被拒時把 `refused:`／`conflict:` 行原樣轉告；`push <ref>: failed: …` 代表本機已寫入、push 失敗，照實列入「待手動處理」，不要重試寫入。
+3. **讀輸出**：第一行 `result: ok|noop|skipped|rejected|error|usage-error`（帶 `--json` 時 stdout 是一個 JSON 物件，第一行是 `{`，看它的 `result` 鍵）；退出碼 0 成功、1 被拒（**零寫入**）、2 用法錯誤。被拒時把 `refused:`／`conflict:` 行原樣轉告；`push <ref>: failed: …` 代表本機已寫入、push 失敗，照實列入「待手動處理」，不要重試寫入。
 4. **有沒有人**：引數帶 `--unattended`（排程叫起一律帶）就是**無人**；沒帶、由使用者在這個 session 觸發就是**有人**。不偵測環境。
 5. **`--allow`**：逗號分隔，值只能是 `commit`、`land`、`push`；有其他值就印出正確用法後停下。只在無人時有意義，有人時忽略並說一句「有人值守，`--allow` 不使用，每步照常確認」。
    - 授權的是步驟，不是 push 本身：`content commit` 與 `land` 照原語的行為各自 push 它寫的 ref；`push` 授權的是第 8 步。

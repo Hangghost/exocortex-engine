@@ -18,7 +18,8 @@ argument-hint: "[--unattended]"
    - 以下 `RUN <模組>` 代表：在工作區根目錄執行，先設好 `env` 的每個環境變數，再跑 `<python> -m exocortex_engine.<模組>`。例：`PYTHONUTF8=1 ./.venv/Scripts/python.exe -m exocortex_engine.day survey --fetch --json`。
 2. **版本檢查**：跑 `RUN day version`，第一行 `version: <x.y.z>` 必須與本檔開頭「需要的引擎版本」**完全相等**。不相等或跑不起來：**停下**，印出兩邊版本與兩組更新指令（套件：把工作區 `pyproject.toml` 的引擎依賴 tag 改成 `v<本檔版本>` 後 `uv sync --active`；plugin：`claude plugin marketplace update exocortex-engine` 再 `claude plugin update exo@exocortex-engine`）。
 3. **有沒有人**：引數帶 `--unattended`（排程叫起一律帶）就是**無人**；沒帶、由使用者在這個 session 觸發就是**有人**。不偵測環境。無人時第 9 步不發問、不寫入。
-4. **讀輸出**：第一行 `result: ok|noop|skipped|rejected|error|usage-error`；退出碼 0 成功、1 被拒（零寫入）、2 用法錯誤。
+4. **讀輸出**：第一行 `result: ok|noop|skipped|rejected|error|usage-error`；帶 `--json` 時 stdout 是一個 JSON 物件，看它的 `result` 鍵（第一行是 `{`，不是 `result:`）。退出碼 0 成功、1 被拒（零寫入）、2 用法錯誤。
+   - **判斷「跑不起來」**：stdout 能解析成帶 `result` 鍵的 JSON（不帶 `--json` 時：第一行是 `result:`），代表模組有在跑，依 `result` 與退出碼判讀；解析不到（stdout 空或不是那個形狀，例如 stderr 為 `No module named …`），才是模組未安裝或跑不起來。兩者的退出碼可能同樣是 1，**不能**只看退出碼區分。
 
 ## 1. 取狀態
 
@@ -45,9 +46,9 @@ argument-hint: "[--unattended]"
 
 跑 `RUN todo list --json`（只列 Active）。
 
-- 跑不起來（stdout 沒有 `result:` 第一行，例如 stderr 為 `No module named exocortex_engine.todo`）：整段換成一行「待辦：todo 未安裝（<錯誤首行>）」。
+- 跑不起來（照第 0 步第 4 點：stdout 解析不到帶 `result` 鍵的 JSON，例如 stderr 為 `No module named exocortex_engine.todo`）：整段換成一行「待辦：todo 未安裝（<stderr 首行>）」。
+- 被拒或失敗（JSON 的 `result` 不是 `ok`／`noop`）：整段換成一行「待辦：讀取失敗（<`messages` 裡的 `refused:`／`error:` 行>）」。
 - `exists == false`：整段換成一行「待辦：尚未建立 `inbox/todos.md`（`/exo:todo add` 會建立）」。
-- 被拒（`result: rejected`）：整段換成一行「待辦：讀取失敗（<`refused:` 行>）」。
 - 以上三種都**不得**省略成「沒有待辦」。檔案存在且 `count == 0` 時整段省略。
 - 否則：「待辦 <count> 項，逾期或今天到期 <N> 項」，N 是 `todos[]` 中 `state == "open"`、`due` 不是 `null` 且 `due <= survey 的 today` 的條數；再列前 3 條（逾期／到期者在前，其餘照檔案順序），每條「`<ticket>` <title>（due <due>）」。`warnings` 非空時附一行「另有 <數> 則格式警告，`/exo:todo list` 查看」。
 
@@ -57,8 +58,8 @@ argument-hint: "[--unattended]"
 
 - `count > 0` 或 `any_failed == true`：一行「`<name>`：未決 <count> 項，`/exo:next <name>` 展開」，`any_failed` 為真時附「（部分來源讀取失敗）」。**不得**只顯示較小的數字或略掉失敗。
 - `count == 0` 且 `any_failed == false`：不列。
-- 跑不起來（stdout 沒有 `result:` 第一行，例如 stderr 為 `No module named exocortex_engine.next_items`；退出碼同樣是 1，要靠這點與下一條區分）：整段換成一行「未決：next 未安裝（<錯誤首行>）」，不再逐專案嘗試。
-- 該專案被拒或失敗（有 `result:` 行、非 0 結束，例如專案不存在）：一行「`<name>`：無法盤點（<`refused:` 或錯誤首行>）」。
+- 跑不起來（照第 0 步第 4 點：stdout 解析不到帶 `result` 鍵的 JSON，例如 stderr 為 `No module named exocortex_engine.next_items`；退出碼同樣是 1，要靠這點與下一條區分）：整段換成一行「未決：next 未安裝（<stderr 首行>）」，不再逐專案嘗試。
+- 該專案無法盤點（stdout 是帶 `result` 鍵的 JSON、退出碼非 0：`rejected` 退出碼 1，例如專案不存在；`usage-error` 退出碼 2，例如名字不是 kebab-case）：一行「`<name>`：無法盤點（<`messages` 裡的 `refused:`／`error:` 行>）」，其他專案照常盤點。
 - 一行都沒有時整段省略。
 
 ## 7. 健康檢查

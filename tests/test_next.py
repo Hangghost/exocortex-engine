@@ -240,6 +240,9 @@ class NextCli(WorkspaceCase):
             self.assertEqual(d["suggestions"], ["alpha"])
         self.assertIn("did you mean: alpha?", self.nx("show", "alpah").stdout)
         self.assertEqual(self.nx("show", "Not_Kebab").returncode, 2)
+        # /exo:onboard tells a refusal from a missing module by a JSON stdout with `result`
+        code, d = self.nx_json("show", "Not_Kebab")
+        self.assertEqual((code, d["result"]), (2, "usage-error"), d)
 
     # ---- target ----
 
